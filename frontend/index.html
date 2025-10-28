@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Transcendence Pong</title>
+  <link href="style.css" rel="stylesheet">
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center">
+
+  <!-- Header / Navigation -->
+  <header class="p-4 w-full bg-gray-800 flex justify-center gap-4 shadow-md">
+    <button id="homeBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition">Home</button>
+    <button id="tournamentBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded transition">Tournament</button>
+    <button id="playersBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded transition">Players</button>
+    <button id="matchesBtn" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded transition">Matches</button>
+  </header>
+
+  <!-- Main content area -->
+  <main id="app" class="w-full max-w-6xl flex flex-col items-center mt-8 p-4"></main>
+
+  <!-- Footer -->
+  <footer class="w-full text-center text-gray-400 py-4 mt-auto border-t border-gray-700">
+    Transcendence 42 &copy; 2025 — Game Management Dashboard
+  </footer>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>
