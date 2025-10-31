@@ -1,15 +1,15 @@
-// backend/src/db/db.ts
+// backend/src/db/index.ts
 import sqlite3 from "sqlite3";
-import { open } from "sqlite";
+import { open, Database } from "sqlite";
 import path from "path";
 import fs from "fs";
 
-export async function initDB() {
+export async function initDB(): Promise<Database> {
   // ----------------------------
   // Paths
   // ----------------------------
-  const dbPath = path.resolve(__dirname, "../../../data/database.sqlite"); // database file
-  const schemaPath = path.resolve(__dirname, "./schema.sql");            // schema.sql
+  const dbPath = path.resolve(process.cwd(), "data/database.sqlite"); // database file
+  const schemaPath = path.resolve(__dirname, "schema.sql");            // schema.sql
 
   // Ensure /data directory exists
   const dataDir = path.dirname(dbPath);

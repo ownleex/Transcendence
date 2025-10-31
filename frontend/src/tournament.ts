@@ -1,8 +1,8 @@
 import { fetchPlayers } from "./api";
 
 export async function showTournament(container: HTMLElement) {
-  const tournamentId = 1; // Example tournament
-  const players = await fetchPlayers(tournamentId);
+  const tournament_id = 1; // Example tournament
+  const players = await fetchPlayers(tournament_id);
 
   const list = document.createElement("ul");
   players.forEach((p) => {

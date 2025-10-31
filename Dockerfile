@@ -1,43 +1,60 @@
-# ------------------------
-# Stage 1: Build backend
-# ------------------------
-FROM node:20-alpine AS builder
+# ==========================================================
+# 🏗️ Stage 1: Build Frontend
+# ==========================================================
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# 1️⃣ Copy package files and install deps
+COPY frontend/package*.json ./
+RUN npm install
+
+# 2️⃣ Copy all frontend source files
+COPY frontend/ .
+
+# 3️⃣ Build Vite project (compiles .ts -> .js)
+RUN npm run build
+
+# ==========================================================
+# ⚙️ Stage 2: Build Backend (TypeScript -> JavaScript)
+# ==========================================================
+FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/backend
 
-# 1️⃣ Copy package files and install all dependencies (dev + prod)
+# 1️⃣ Copy backend package files and install deps
 COPY backend/package*.json ./
 RUN npm install
 
-# 2️⃣ Copy backend source
+# 2️⃣ Copy backend source and config
 COPY backend/src ./src
 COPY backend/tsconfig.json ./
 
-# 3️⃣ Compile TypeScript
+# 3️⃣ Compile backend TypeScript
 RUN npx tsc
 
-# 4️⃣ Copy schema.sql to dist
+# 4️⃣ Copy schema.sql into build output
 RUN mkdir -p dist/db && cp src/db/schema.sql dist/db/
 
-# ------------------------
-# Stage 2: Runtime
-# ------------------------
+# ==========================================================
+# 🚀 Stage 3: Runtime
+# ==========================================================
 FROM node:20-slim
 
 WORKDIR /app/backend
 
-# 1️⃣ Copy only production dependencies
+# 1️⃣ Copy production dependencies only
 COPY backend/package*.json ./
 RUN npm install --omit=dev
 
-# 2️⃣ Copy compiled backend from builder
-COPY --from=builder /app/backend/dist ./dist
+# 2️⃣ Copy compiled backend code
+COPY --from=backend-builder /app/backend/dist ./dist
 
-# 3️⃣ Copy frontend for Fastify serving
-COPY frontend ./dist/frontend
+# 3️⃣ Copy built frontend (already compiled by Vite)
+COPY --from=frontend-builder /app/frontend/dist ./dist/frontend
 
-# 4️⃣ Expose API port
+# 4️⃣ Expose Fastify API port
 EXPOSE 3000
 
-# 5️⃣ Start the backend server
+# 5️⃣ Start backend server
 CMD ["node", "dist/server.js"]

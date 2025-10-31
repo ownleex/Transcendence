@@ -8,7 +8,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
   // Register new user
   // ----------------------------
   fastify.post("/register", async (req, reply) => {
-    const { username, password, email } = req.body as any;
+    console.log("Registering user:", req.body);
+    const { username, email, password } = req.body as any;
 
     if (!username || !password || !email) {
       return reply.code(400).send({ success: false, error: "All fields are required" });
@@ -17,8 +18,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
     try {
       const hashed = await bcrypt.hash(password, 10);
       const res = await fastify.db.run(
-        "INSERT INTO User (username, password, email) VALUES (?, ?, ?)",
-        [username, hashed, email]
+        "INSERT INTO User (username, email, password) VALUES (?, ?, ?)",
+        [username, email, hashed]
       );
 
       // Initialize stats for the new user

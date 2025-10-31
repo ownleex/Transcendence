@@ -1,5 +1,6 @@
+// backend/src/types/fastify.d.ts
 import "fastify";
-import { Database } from "sqlite"; // matches your db export type
+import { Database } from "sqlite";
 
 declare module "fastify" {
   interface FastifyInstance {

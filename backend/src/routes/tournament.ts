@@ -90,6 +90,22 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     }
   });
 
+ fastify.get("/tournament/:id/players", async (req, reply) => {
+  const { id } = req.params as any;
+  try {
+    const players = await fastify.db.all(
+      `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username
+       FROM Player p
+       JOIN User u ON p.user_id = u.id
+       WHERE p.tournament_id = ?`,
+      [id]
+    );
+    reply.send(players);
+  } catch (err) {
+    reply.status(500).send({ success: false, error: (err as Error).message });
+  }
+});
+
   // ----------------------------
   // Update tournament status
   // ----------------------------

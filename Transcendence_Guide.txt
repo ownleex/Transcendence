@@ -2,7 +2,11 @@ Transcendence project-42-TEAM: Morgan-Nicolas-Lien
 
 transcendence-42/
 ├── backend/
-│   ├── data/database.sqlite
+│   ├── data/
+│   │   └── database.sqlite
+│   ├── certs/
+│   │   └──server.crt         # Your SSL certificate
+│   │   └── server.key
 │   ├── src/
 │   │   ├── server.ts                    # Fastify app + register routes + WS
 │   │   ├── db/
@@ -24,15 +28,15 @@ transcendence-42/
 │
 ├── frontend/
 │   ├── index.html                        # Main page + navigation
-│   ├── style.css                         # Tailwind CSS
-│   ├── main.ts                            # SPA router
-│   ├── pong.ts                            # Pong game logic
-│   ├── tournament.ts                      # Tournament logic + UI
-│   ├── alias.ts                           # Alias registration form
-│   ├── api.ts                             # API calls to backend
-│   └── types.ts                           # TypeScript types for API responses
+│   ├── src/
+│    |   ├── style.css                         # Tailwind CSS
+│    |   ├── main.ts                            # SPA router
+│    |   ├── pong.ts                            # Pong game logic
+│    |   ├── tournament.ts                      # Tournament logic + UI
+│    |   ├── alias.ts                           # Alias registration form
+│    |   ├── api.ts                             # API calls to backend
+│    |   └── types.ts                           # TypeScript types for API responses
 │   └──package.json
-│
 ├── Dockerfile                             # Build container
 ├── docker-compose.yml                      # Run container
 └── .gitignore
@@ -240,7 +244,7 @@ SPA Action Flow (examples):
 | Leaderboards     | `UserStats`, `MatchHistory`          | Display player rankings and winrates                   |
 | Social / Friends | `Friend`, `FriendsHistory`           | Manage friends, track history                          |
 
-
+docker-compose down --volumes --remove-orphans
 docker system prune -af --volumes
 docker compose build --no-cache
 docker compose up
@@ -271,6 +275,10 @@ sqlite3 backend/data/database.sqlite < migrations/add_user_bio.sql
 curl http://127.0.0.1:3000/api/tables
 curl http://127.0.0.1:3000/api/table/User
 sqlite3 backend/data/database.sqlite "SELECT * FROM User;"
+
+mkdir certs
+openssl req -x509 -newkey rsa:4096 -nodes -keyout certs/server.key -out certs/server.crt -days 365
+
 
 Perfect! Here’s a **step-by-step guide** to run your **Transcendence 42 Pong SPA** project with the structure we set up. I’ll cover **development mode** and **Docker deployment**.
 
@@ -569,4 +577,241 @@ If you use the latest `initDB()` (the one that checks tables and applies `schema
 
 Would you like me to generate a **full list of SQL queries** (CRUD operations) for each table — e.g., how to register a user, send a friend request, create a match, update ELO — so your route handlers can just plug them in directly?
 
+Ah — that explains it. `nvm` isn’t installed on your system yet, so your shell can’t switch Node versions. On Ubuntu / WSL you can install it like this:
+
+---
+
+### 1️⃣ Install `nvm`:
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.6/install.sh | bash
+```
+
+Then reload your shell:
+
+```bash
+export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+```
+
+Check it works:
+
+```bash
+nvm --version
+```
+
+---
+
+### 2️⃣ Install Node 22:
+
+```bash
+nvm install 22
+nvm use 22
+node -v   # should show v22.x.x
+```
+
+---
+
+After that, go to your `frontend` folder and run:
+
+```bash
+npm install
+npm run dev
+```
+
+Vite will now start and compile your `.ts` files properly.
+
+If you want, I can also give a **one-time command sequence** to get Node upgraded and the frontend dev server running immediately.
+
+Perfect — that’s clear ✅
+
+So, your requirement is:
+
+> “I must keep everything in **TypeScript (.ts)** — no `.js` files in my repo or deployment.”
+
+That’s totally fine ✅
+You can absolutely keep `.ts` in your **frontend** and **backend**,
+**but you must still *compile* or *bundle* them before the browser can execute them** —
+because browsers **cannot** natively run `.ts`.
+
+Let’s fix this *without converting your code manually to `.js` files in your repo.*
+
+---
+
+## 🧭 The Correct Way: Keep `.ts` → Auto-bundle for the browser
+
+The modern way to do this (while keeping `.ts`) is to:
+
+* Keep **source files** as `.ts`.
+* Use a **TypeScript-aware dev server (like Vite)** or **build step** to serve transpiled `.js` *in memory*.
+* You never touch or commit `.js` — it’s handled automatically.
+
+---
+
+## ✅ Option 1: Use **Vite** (Recommended, Cleanest, Fully TypeScript)
+
+Let’s make your **frontend stay TypeScript**, but make it *runnable* for browsers.
+
+---
+
+### 🧱 Step-by-Step Setup (100% TypeScript Frontend)
+
+#### 1. Install Vite and TypeScript
+
+```bash
+cd frontend
+npm init -y
+npm install vite typescript
+```
+
+#### 2. Create a simple `vite.config.ts`
+
+*(Vite supports `.ts` configs!)*
+
+```ts
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": "http://localhost:3000", // send API calls to backend
+    },
+  },
+});
+```
+
+#### 3. Organize your frontend files like this:
+
+```
+frontend/
+├── index.html
+├── src/
+│   ├── main.ts
+│   ├── alias.ts
+│   ├── style.css
+│   └── ...
+├── vite.config.ts
+├── package.json
+└── tsconfig.json
+```
+
+#### 4. Update `index.html` to use `.ts` directly (Vite handles it!)
+
+```html
+<script type="module" src="/src/main.ts"></script>
+```
+
+✅ You can now keep:
+
+```ts
+// src/alias.ts
+export const register = ...
+```
+
+No `.js` files anywhere — only `.ts`.
+
+---
+
+#### 5. Add npm scripts (in `frontend/package.json`)
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
+```
+
+---
+
+#### 6. Add `tsconfig.json`
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+---
+
+#### 7. Run it in dev mode
+
+```bash
+npm run dev
+```
+
+Visit [http://localhost:5173](http://localhost:5173) →
+Your TypeScript frontend runs directly, talking to the backend at [http://localhost:3000](http://localhost:3000).
+
+---
+
+#### 8. (Optional) Build for production (still no `.js` in your repo)
+
+```bash
+npm run build
+```
+
+Vite creates a temporary `/dist` folder with `.js` for browsers —
+you **don’t commit that**, you only deploy it.
+
+---
+
+## ✅ Option 2: Run TypeScript Directly Inside Docker
+
+If your **Dockerfile** serves frontend files (not using Vite dev mode),
+you can modify it like this:
+
+```dockerfile
+# Build stage
+FROM node:18 AS build
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build  # Vite compiles .ts -> .js (but only inside container)
+
+# Production stage
+FROM node:18
+WORKDIR /app
+COPY --from=build /app/frontend/dist ./frontend
+COPY backend ./backend
+WORKDIR /app/backend
+RUN npm install
+CMD ["npm", "run", "start"]
+```
+
+You’re still writing **TypeScript**, and `.js` only exists *inside* the container — not in your repo.
+
+---
+
+## 🧩 Summary
+
+| Approach                | Keeps `.ts` only      | Browser works | Auto compile | Docker compatible |
+| ----------------------- | --------------------- | ------------- | ------------ | ----------------- |
+| **Vite (recommended)**  | ✅                     | ✅             | ✅            | ✅                 |
+| Raw `.ts` in `<script>` | ❌                     | ❌             | ❌            | ❌                 |
+| Manual `tsc` compile    | ❌ (creates .js files) | ✅             | ✅            | ✅                 |
+
+---
+
+## 🧠 TL;DR
+
+* Browsers can’t run `.ts`, but Vite transparently compiles it at runtime.
+* You can **keep `.ts` in your repo**, **no `.js` files checked in**, and still have data saved to your database.
+* Use Vite as your dev/build tool — it’s made for exactly this.
+
+---
+
+Would you like me to show exactly how to modify your current `docker-compose.yml` and `Dockerfile` so this Vite-powered TypeScript frontend works seamlessly with your Fastify backend (no `.js` files at all)?
 

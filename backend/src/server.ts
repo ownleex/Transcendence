@@ -20,7 +20,7 @@ fastify.register(dbPlugin);
 // API Routes
 // -------------------------
 
-fastify.register(userRoutes, { prefix: "/api/users" });
+fastify.register(userRoutes, { prefix: "/api" });
 fastify.register(tournamentRoutes, { prefix: "/api/tournament" });
 fastify.register(statsRoutes, { prefix: "/api/stats" });
 fastify.register(notificationRoutes, { prefix: "/api/notifications" });
@@ -28,7 +28,7 @@ fastify.register(notificationRoutes, { prefix: "/api/notifications" });
 // List all database tables
 fastify.get("/api/tables", async (request, reply) => {
   const db = fastify.db;
-  const rows = await db.all(`
+  const rows: { name: string }[] = await db.all(`
     SELECT name FROM sqlite_master
     WHERE type='table' AND name NOT LIKE 'sqlite_%'
   `);
@@ -59,12 +59,15 @@ fastify.get<{ Params: { name: string } }>("/api/table/:name", async (request, re
 // -------------------------
 
 fastify.register(fastifyStatic, {
-  root: path.join(__dirname, "../../frontend"),
+  root: path.join(__dirname, "frontend"),
   prefix: "/",
 });
 
 // SPA fallback for all other routes
 fastify.setNotFoundHandler((req, reply) => {
+  if (req.url?.startsWith("/api")) {
+    return reply.code(404).send({ error: "API route not found" });
+  }
   reply.sendFile("index.html");
 });
 

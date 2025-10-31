@@ -5,6 +5,5 @@ services:
       - "3000:3000"
     volumes:
       - ./backend/data:/app/backend/data       # persist SQLite database
-      - ./frontend:/app/frontend   # optional: live frontend editing
     command: node /app/backend/dist/server.js
 
