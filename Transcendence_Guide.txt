@@ -40,6 +40,15 @@ transcendence-42/
 ├── Dockerfile                             # Build container
 ├── docker-compose.yml                      # Run container
 └── .gitignore
+Transcendence
+ID: u-s4t2ud-6c4b7472c05db1edf79f3ce2420fd29d2d2c6f8742b08294f3d636133bc77ea1
+Secret: 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
+Transcendencelien:
+ID: u-s4t2ud-aa6b16f81a55d5f0ca9597c945f0bd2f0c7cf38612eaf493b08145779fe43285
+Secret: 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
+Transcendencelien1
+ID: u-s4t2ud-d8e673e16443cd3391a7afb2fe70bb019ed13f10abee28d6a9857964bbb88203
+Secret: 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
 
 ─────────────────────────────────────────────────────────────
                      FRONTEND SPA
@@ -283,11 +292,16 @@ rm backend/data/database.sqlite
 sqlite3 backend/data/database.sqlite < backend/src/db/schema.sql
 sqlite3 backend/data/database.sqlite < migrations/add_user_bio.sql
 
-curl http://127.0.0.1:3000/api/tables
-curl http://127.0.0.1:3000/api/table/User
+curl -k https://127.0.0.1:3000/api/tables
+curl -k https://127.0.0.1:3000/api/table/Userimport { FastifyInstance, FastifyRequest, FastifyReply } 
 sqlite3 backend/data/database.sqlite "SELECT * FROM User;"
 curl -k https://localhost:3000/api/table/User
+sqlite3 ./backend/data/database.sqlite ".tables
+sqlite3 ./backend/data/database.sqlite "SELECT * FROM User LIMIT 10;"
+
 curl -k -v -L https://localhost:3000/api/auth/signin
+
+https://developer.mozilla.org/en-US/docs/Web/API/Document
 
 mkdir certs
 openssl req -x509 -newkey rsa:4096 -nodes -keyout certs/server.key -out certs/server.crt -days 365

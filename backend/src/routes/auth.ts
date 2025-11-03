@@ -10,22 +10,21 @@ const FORTYTWO_CONFIGURATION = {
 };
 
 export default async function authRoutes(fastify: FastifyInstance) {
-  // Register OAuth2 plugin
   fastify.register(fastifyOauth2, {
     name: "fortyTwoOAuth2",
+    scope: ["public"],
     credentials: {
       client: {
         id: process.env.FORTYTWO_CLIENT_ID!,
         secret: process.env.FORTYTWO_CLIENT_SECRET!,
       },
-      auth: FORTYTWO_CONFIGURATION, 
+      auth: FORTYTWO_CONFIGURATION,
     },
     startRedirectPath: "/api/auth/signin",
-    callbackUri: "https://localhost:3000/api/auth/callback",
+    callbackUri: "https://localhost:3000/api/auth/callback/42",
   });
 
-  // OAuth2 callback route
-  fastify.get("/api/auth/callback", async (req: FastifyRequest, reply: FastifyReply) => {
+  fastify.get("/api/auth/callback/42", async (req: FastifyRequest, reply: FastifyReply) => {
     const token = await (fastify as FastifyInstance & { fortyTwoOAuth2: OAuth2Namespace })
       .fortyTwoOAuth2.getAccessTokenFromAuthorizationCodeFlow(req);
 
@@ -33,27 +32,20 @@ export default async function authRoutes(fastify: FastifyInstance) {
       headers: { Authorization: `Bearer ${token.token.access_token}` },
     }).then((res: Response) => res.json() as any);
 
-// ✅ Explicitly type user
-type DBUser = { id: number; username: string; email: string };
+    type DBUser = { id: number; username: string; email: string };
+    let user = (await fastify.db.get("SELECT * FROM User WHERE email = ?", [userData.email])) as DBUser | undefined;
 
-// Cast the result from db.get instead of using a generic
-let user = (await fastify.db.get("SELECT * FROM User WHERE email = ?", [userData.email])) as DBUser | undefined;
+    if (!user) {
+      const result = (await fastify.db.run(
+        "INSERT INTO User (username, email, password) VALUES (?, ?, ?)",
+        [userData.login, userData.email, ""]
+      )) as { lastID: number; changes: number };
 
-if (!user) {
-  // Explicitly type the result from db.run
-  const result = (await fastify.db.run(
-    "INSERT INTO User (username, email, password) VALUES (?, ?, ?)",
-    [userData.login, userData.email, ""]
-  )) as { lastID: number; changes: number };
+      user = { id: result.lastID, username: userData.login, email: userData.email };
+    }
 
-  user = { id: result.lastID, username: userData.login, email: userData.email };
-}
-
-// Sign JWT with both id and username
-const jwt = fastify.jwt.sign({ id: user.id, username: user.username });
-
-// Redirect user to frontend
-reply.redirect(`/frontend/index.html?token=${jwt}`);
-});
+    const jwt = fastify.jwt.sign({ id: user.id, username: user.username });
+    reply.redirect(`/frontend/index.html?token=${jwt}`);
+  });
 }
 
