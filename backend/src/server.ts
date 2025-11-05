@@ -7,6 +7,7 @@ import fastifyJwt from "@fastify/jwt";
 import { FastifyRequest, FastifyReply } from "fastify";
 import http from "http";
 import fs from "fs";
+import dotenv from "dotenv";
 
 import dbPlugin from "./plugins/db";
 import userRoutes from "./routes/user";
@@ -15,6 +16,11 @@ import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notification";
 import { setupWebSocket } from "./ws/game";
 import authRoutes from "./routes/auth";
+
+// -------------------------
+// Load environment variables
+// -------------------------
+dotenv.config();
 
 const certsPath = path.join(__dirname, "../certs");
 
@@ -33,6 +39,24 @@ const fastify = Fastify({
 fastify.register(fastifyCors, { origin: "*" });
 fastify.register(dbPlugin);
 fastify.register(fastifyMultipart);
+
+// -------------------------
+// JWT Setup (before routes)
+// -------------------------
+fastify.register(fastifyJwt, {
+  secret: process.env.JWT_SECRET || "supersecret",
+});
+
+fastify.decorate(
+  "authenticate",
+  async function (request: FastifyRequest, reply: FastifyReply) {
+    try {
+      await request.jwtVerify();
+    } catch {
+      reply.code(401).send({ error: "Unauthorized" });
+    }
+  }
+);
 
 // -------------------------
 // API Routes
@@ -123,28 +147,13 @@ fastify.setNotFoundHandler((req, reply) => {
 });
 
 // -------------------------
-// JWT Auth setup
-// -------------------------
-fastify.register(fastifyJwt, {
-    secret: process.env.JWT_SECRET || "supersecret",
-});
-
-fastify.decorate("authenticate", async function (request: FastifyRequest, reply: FastifyReply) {
-    try {
-        await request.jwtVerify();
-    } catch {
-        reply.code(401).send({ error: "Unauthorized" });
-    }
-});
-
-// -------------------------
 // Start server
 // -------------------------
 const start = async () => {
     try {
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
         setupWebSocket(fastify.server as http.Server);
-        console.log("🚀 Transcendence running at http://localhost:3000");
+        console.log("🚀 Transcendence running at https://localhost:3000");
     } catch (err) {
         fastify.log.error(err);
         process.exit(1);
