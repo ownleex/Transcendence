@@ -23,7 +23,7 @@ export const fetchPlayers = async (tournament_id: number) => {
   return request(`/tournament/${tournament_id}/players`);
 };
 export const login = (user: { username: string; password: string; token?: string }) =>
-  request("/login", { method: "POST", body: JSON.stringify(user) })
+  request("/auth/signin", { method: "POST", body: JSON.stringify(user) })
     .then((data) => {
       if (data.token) localStorage.setItem("token", data.token);
       return data;

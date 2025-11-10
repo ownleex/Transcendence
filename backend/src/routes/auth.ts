@@ -3,6 +3,7 @@ import fastifyOauth2, { OAuth2Namespace } from "@fastify/oauth2";
 import fetch from "node-fetch";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
+import * as bcrypt from "bcryptjs";
 
 const FORTYTWO_CONFIGURATION = {
   authorizeHost: "https://api.intra.42.fr",
@@ -127,6 +128,41 @@ export default async function authRoutes(fastify: FastifyInstance) {
   console.error("=== GitHub OAuth error END ===");
   reply.code(500).send({ error: "GitHub authentication failed", details: err.message ?? "see server logs" });
 }
+});
+
+fastify.post("/api/auth/signin", async (request: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const { user, password } = request.body as { user?: string; password?: string };
+
+    if (!user || !password) {
+      return reply.code(400).send({ error: "Username and password required" });
+    }
+
+    // find by username or email
+    const dbUser =
+      (await fastify.db.get("SELECT * FROM User WHERE username = ?", [user])) ||
+      (await fastify.db.get("SELECT * FROM User WHERE email = ?", [user]));
+
+    if (!dbUser) {
+      return reply.code(401).send({ error: "Invalid credentials" });
+    }
+
+    const hashed = dbUser.password || ""; // ensure string
+    const valid = await bcrypt.compare(password, hashed);
+    if (!valid) {
+      return reply.code(401).send({ error: "Invalid credentials" });
+    }
+
+    const jwt = fastify.jwt.sign({ id: dbUser.id, username: dbUser.username });
+    return reply.send({ token: jwt });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      fastify.log.error(err, "signin error");
+    } else {
+      fastify.log.error({ thrown: err }, "signin error (non-error)");
+    }
+    return reply.code(500).send({ error: "Internal server error" });
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -7,25 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
 
   <script>
-    // --- THEME SETUP ---
-    if (localStorage.theme === 'dark' ||
-        (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-
-    function toggleTheme() {
-      const html = document.documentElement;
-      if (html.classList.contains('dark')) {
-        html.classList.remove('dark');
-        localStorage.theme = 'light';
-      } else {
-        html.classList.add('dark');
-        localStorage.theme = 'dark';
-      }
-    }
-
     // --- PAGE SWITCHING ---
     // header is persistent, hide/show other sections only
 function showSection(section) {
@@ -160,16 +141,6 @@ document.getElementById('forgot-form').addEventListener('submit', async (e) => {
       msg.className = 'mt-3 text-sm text-red-600';
     }
   });
-      // Show Pong section after "Sign in"
-      document.getElementById('signinBtn').addEventListener('click', (e) => {
-        e.preventDefault();
-        // Hide Sign In / Register
-        document.getElementById('header1-section').classList.add('hidden');
-        document.getElementById('signin-section').classList.add('hidden');
-        document.getElementById('register-section').classList.add('hidden');
-        // Show Pong dashboard
-        document.getElementById('pong-section').classList.remove('hidden');
-      });
     });
   </script>
 
@@ -205,7 +176,7 @@ document.getElementById('forgot-form').addEventListener('submit', async (e) => {
         <a href="#" id="forgot-link" class="text-blue-500 hover:underline">Forgot password?</a>
       </div>
 
-      <button type="button" id="signinBtn" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg transition">Sign in</button>
+      <button type="submit" id="signinBtn" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg transition">Sign in</button>
 
       <div class="my-3 text-gray-500 dark:text-gray-400 text-sm">or</div>
 
@@ -458,6 +429,45 @@ document.getElementById('forgot-form').addEventListener('submit', async (e) => {
     }
   });
 </script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const signinForm = document.getElementById('signin-form');
 
+  signinForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const user = e.target.user.value.trim();
+    const password = e.target.password.value.trim();
+
+    if (!user || !password) {
+      alert('Please enter both username and password.');
+      return;
+    }
+
+    try {
+      const res = await fetch('https://localhost:3000/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.token) {
+        // Save token and show Pong section
+        sessionStorage.setItem('token', data.token);
+        document.getElementById('header1-section').classList.add('hidden');
+        document.getElementById('signin-section').classList.add('hidden');
+        document.getElementById('register-section').classList.add('hidden');
+        document.getElementById('pong-section').classList.remove('hidden');
+      } else {
+        alert(data.error || 'Invalid credentials');
+      }
+    } catch (err) {
+      alert('Network error — please try again.');
+    }
+  });
+});
+</script>
 </body>
 </html>
