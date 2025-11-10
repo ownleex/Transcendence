@@ -1,52 +1,67 @@
 Transcendence project-42-TEAM: ALexandre-Clement-Lien
 
 transcendence-42/
-├── backend/
-│   ├── data/
-│   │   └── database.sqlite
-│   ├── certs/
-│   │   └──server.crt         # Your SSL certificate
-│   │   └── server.key
-│   ├── src/
-│   │   ├── server.ts                    # Fastify app + register routes + WS
-│   │   ├── db/
-│   │   │   └── index.ts                 # SQLite connection and helpers
- |    |	    |    └── schema.sql               # your new schema
-│   │   ├── plugins/
-│   │   │   ├── db.ts 
-│   │   ├── routes/
-│   │   │   ├── user.ts                 # Player alias registration
-│   │   │   ├── tournament.ts            # Tournament and match APIs
-│   │   │   └── stats.ts                 # Leaderboard / stats API
-│   │   │   └── notification.ts     # Sending or storing user notifications
-│   │   │   └── auth.ts
-│   │   ├── types/
-│   │   │   ├── fastify.d.ts
-│   │   │   └── fastify-jwt.d.ts
-│   │   │   └── fastify-oauth2.d.ts
-│   │   │   └── node-fetch.d.ts
-│   │   │   └── user.ts
-│   │   ├── ws/
-│   │   │   └── game.ts                  # WebSocket Pong server
-│   ├── package.json
-│   └── tsconfig.json
+├── backend/                                      # ⚙️ Node.js + Fastify + TypeScript backend
+│   ├── data/                                     # 📂 Database and persistent data
+│   │   └── database.sqlite                       # 🗄️ SQLite database file
+│   │
+│   ├── src/                                      # 🧠 Backend TypeScript source code
+│   │   ├── server.ts                             # 🚀 Fastify entrypoint: init server, routes, plugins, websockets
+│   │   │
+│   │   ├── db/                                   # 💾 Database access layer
+│   │   │   ├── index.ts                          # Opens SQLite connection + query helpers
+│   │   │   └── schema.sql                        # SQL schema definitions (tables, indices, seeds)
+│   │   │
+│   │   ├── plugins/                              # 🔌 Fastify plugin declarations
+│   │   │   └── db.ts                             # Fastify plugin that attaches SQLite to app instance
+│   │   │
+│   │   ├── routes/                               # 🌐 API endpoints grouped by domain
+│   │   │   ├── user.ts                           # User registration / profile / alias management
+│   │   │   ├── auth.ts                           # Authentication (JWT + OAuth2 login)
+│   │   │   ├── tournament.ts                     # Tournament CRUD + match endpoints
+│   │   │   ├── stats.ts                          # Leaderboard + player stats routes
+│   │   │   └── notification.ts                   # Send/store user notifications or alerts
+│   │   │
+│   │   ├── ws/                                   # ⚡ WebSocket handlers
+│   │   │   └── game.ts                           # Real-time Pong game server (player sync, match logic)
+│   │   │
+│   │   ├── types/                                # 🧩 TypeScript type declarations (augmentations)
+│   │   │   ├── fastify.d.ts                      # Adds custom Fastify properties (db, authenticate, etc.)
+│   │   │   ├── fastify-jwt.d.ts                  # JWT payload and helper typings
+│   │   │   ├── fastify-oauth2.d.ts               # OAuth2 plugin typings
+│   │   │   ├── node-fetch.d.ts                   # Node-fetch typings (if used for external calls)
+│   │   │   └── user.ts                           # Shared User interface/type definition
+│   │
+│   ├── package.json                              # 📦 Backend dependencies + scripts
+│   └── tsconfig.json                             # ⚙️ TypeScript compiler config (outDir, strict mode, etc.)
 │
-├── frontend/
-│   ├── index.html                        # Main page + navigation
-│   ├── src/
-│    |   ├── style.css                         # Tailwind CSS
-│    |   ├── main.ts                            # SPA router
-│    |   ├── pong.ts                            # Pong game logic
-│    |   ├── tournament.ts                      # Tournament logic + UI
-│    |   ├── alias.ts                           # Alias registration form
-│    |   ├── api.ts                             # API calls to backend
-│    |   └── types.ts                           # TypeScript types for API responses
-│   └──package.json
-├── Dockerfile                             # Build container
-├── docker-compose.yml                      # Run container
-└── .gitignore
+├── frontend/                                     # 🖥️ Single-Page Application (TypeScript + Tailwind)
+│   ├── index.html                                # Main HTML entrypoint with #app container + nav buttons
+│   │
+│   ├── src/                                      # 🎨 Frontend source files
+│   │   ├── style.css                             # TailwindCSS imports + custom styles
+│   │   ├── main.ts                               # SPA router (hash-based navigation)
+│   │   ├── pong.ts                               # Pong game logic + canvas rendering
+│   │   ├── tournament.ts                         # Tournament UI, bracket rendering, join/create logic
+│   │   ├── alias.ts                              # Alias registration / profile setup UI
+│   │   ├── api.ts                                # Wrapper for backend API calls (fetch with JWT, etc.)
+│   │   └── types.ts                              # Frontend-side TypeScript types (API responses, DTOs)
+│   │
+│   └── package.json                              # 📦 Frontend dependencies + build/dev scripts (Vite, Tailwind)
+│
+├── Dockerfile                                    # 🐳 Docker build instructions for backend or full stack
+├── docker-compose.yml                            # 🔧 Multi-service config: backend + frontend + volumes + ports
+├── .env                                          # 🌍 Environment variables (JWT_SECRET, DB_PATH, OAuth keys)
+├── .gitignore                                    # 🚫 Files/folders to ignore (node_modules, certs, data, .env)
+└── Makefile                                    # 📘 Run project
 
 Pour compiler projet:
+make fclean
+make all
+or 
+cd old_project (old project)
+docker-compose down --volumes --remove-orphans (delete all data in the old project to prevent the error for new project)
+cd new_project:
 docker system prune -af --volumes
 docker compose build
 docker compose up
@@ -54,6 +69,28 @@ docker compose up
 Transcendencelien1-42 intra
 ID: u-s4t2ud-d8e673e16443cd3391a7afb2fe70bb019ed13f10abee28d6a9857964bbb88203
 Secret: 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
+
+1.Create une branche: 
+git checkout -b branche name
+
+2. Merge branch into main:
+# a. Update local main from remote
+git checkout main
+git pull origin main
+
+# b. Merge the Lien branch into main
+git merge ta-branche
+
+# c. If merge succeeds (no conflicts), push to remote
+git push origin main
+or 
+git checkout main
+git pull origin main
+git checkout ta-branche
+git merge main
+
+Git clone une branche:
+git clone --branch nam_branch --single-branch git@github.com:T-K-Lien-TRAN/Transcendence.git Transcendence.10.11
 
 ─────────────────────────────────────────────────────────────
                      FRONTEND SPA
@@ -90,7 +127,7 @@ Actions in backend:
 - Insert / Update / Query SQLite tables via fastify.db
 ─────────────────────────────────────────────────────────────
                       SQLITE DATABASE
-─────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────#home──────────
 Tables and Relationships:
 
 ┌──────────────┐       ┌───────────────┐
@@ -304,7 +341,8 @@ curl -k https://127.0.0.1:3000/api/tables
 curl -k https://127.0.0.1:3000/api/table/Userimport { FastifyInstance, FastifyRequest, FastifyReply } 
 sqlite3 backend/data/database.sqlite "SELECT * FROM User;"
 curl -k https://localhost:3000/api/table/User
-sqlite3 ./backend/data/database.sqlite ".tables
+sqlite3 ./backend/data/database.sqlite ".tables"
+sqlite3 ./backend/data/database.sqlite "SELECT * FROM User;"
 sqlite3 ./backend/data/database.sqlite "SELECT * FROM User LIMIT 10;"
 curl -k -v -L https://localhost:3000/api/auth/signin
 curl -k -X POST https://localhost:3000/api/auth/forgot   -H "Content-Type: application/json"   -d '{"email": "lientranthikim@yahoo.com"}'
@@ -930,3 +968,281 @@ Make sure you are under **OAuth Apps**.
 
 If you want, I can walk you through the setup with screenshots — just ask 😊
 
+This error message tells us **Docker can’t start your container because port 3000 on your host machine is already in use**.
+Here’s what’s happening and how to fix it.
+
+---
+
+### 🔍 **The problem**
+
+```
+Bind for 0.0.0.0:3000 failed: port is already allocated
+```
+
+That means something else (another container or a process) is already using port 3000 on your system.
+
+---
+
+### 🧰 **Fix options**
+
+#### **Option 1 – Find and stop the conflicting container**
+
+Run:
+
+```bash
+docker ps
+```
+
+Look for any container mapping port 3000 (e.g. `0.0.0.0:3000->3000/tcp`).
+
+Then stop and remove it:
+
+```bash
+docker stop <container_id>
+docker rm <container_id>
+```
+
+Now restart your stack:
+
+```bash
+make all
+```
+
+---
+
+#### **Option 2 – Free the port (non-Docker process)**
+
+If a *local process* is using port 3000 (like `node`, `npm run dev`, etc.), find it:
+
+**Linux/macOS**
+
+```bash
+sudo lsof -i :3000
+sudo kill -9 <PID>
+```
+
+**Windows (PowerShell)**
+
+```powershell
+netstat -ano | findstr :3000
+taskkill /PID <PID> /F
+```
+
+Then try again.
+
+---
+
+#### **Option 3 – Change your container’s exposed port**
+
+If you want to keep that other process running, just change your container’s port mapping in your `docker-compose.yml` (or `Dockerfile` if you use `EXPOSE`/`-p` manually).
+
+Example:
+
+```yaml
+ports:
+  - "3001:3000"
+```
+
+Then rebuild:
+
+```bash
+docker-compose up --build
+```
+
+---
+
+### ✅ **Summary**
+
+| Fix type                          | Command(s)                        |
+| --------------------------------- | --------------------------------- |
+| Stop conflicting Docker container | `docker ps` → `docker stop <id>`  |
+| Kill host process using port      | `lsof -i :3000` → `kill -9 <pid>` |
+| Change port mapping               | Edit `ports:` to `3001:3000`      |
+
+---
+
+Would you like to show me your `docker-compose.yml` snippet? I can tell you exactly which line to change.
+
+Great — this is a **very good architectural question**, and it’s key to understanding how your frontend and backend work together in your project.
+
+Let’s break it down carefully 👇
+
+---
+
+# 🧠 Big Picture
+
+These **three files (`api.ts`, `alias.ts`, and `user.ts`)** work together as a **bridge between your frontend and backend**.
+
+* **`user.ts`** → Backend **Fastify** routes — defines your actual REST API endpoints (server logic + database).
+* **`api.ts`** → Frontend **API helper** — defines how your frontend (React/Vue/etc.) calls those backend endpoints.
+* **`alias.ts`** → Frontend **form handler** — connects your HTML/JS UI (e.g., a registration form) to the backend via the helper in `api.ts`.
+
+Think of it like this:
+
+```
+[User clicks form on frontend]
+      ↓
+(alias.ts) handles form → calls
+      ↓
+(api.ts) sends HTTP request → talks to
+      ↓
+(user.ts) backend route → uses SQLite DB
+```
+
+---
+
+# 🔹 1. `user.ts` — the **Backend API (Fastify routes)**
+
+This file runs **on the server (Node.js)**.
+It defines all your HTTP endpoints like:
+
+* `POST /register` → create a new user
+* `POST /login` → login user
+* `POST /user/:id/2fa/setup` → setup two-factor authentication
+* `GET /user/:id/friends` → get user’s friends
+* etc.
+
+Each route:
+
+* Receives data from the frontend (`req.body` or `req.params`)
+* Interacts with your **SQLite database**
+* Sends back a JSON response like `{ success: true, userId: 1 }`
+
+✅ Example flow:
+
+```http
+POST /api/register
+Body: { "username": "alice", "email": "alice@example.com", "password": "1234" }
+
+→ user.ts inserts into the User table
+→ returns { success: true, userId: 1 }
+```
+
+---
+
+# 🔹 2. `api.ts` — the **Frontend API Wrapper**
+
+This file runs **in the browser**, not the server.
+
+It’s a **helper utility** that knows how to call the backend endpoints you defined in `user.ts`.
+
+It defines reusable functions like:
+
+```ts
+export const register = (user) => request("/register", { method: "POST", body: JSON.stringify(user) });
+export const login = (user) => request("/login", { method: "POST", body: JSON.stringify(user) });
+```
+
+When your frontend app calls `register()`, it internally does:
+
+```http
+POST https://localhost:3000/api/register
+Content-Type: application/json
+Body: { username, email, password }
+```
+
+…and waits for the JSON reply from your Fastify backend.
+
+The `request()` function inside `api.ts`:
+
+* Automatically adds headers (like `Content-Type`, JWT `Authorization`)
+* Parses JSON
+* Throws errors if something fails (`res.ok === false`)
+
+✅ So `api.ts` is your *frontend abstraction* of backend APIs.
+
+---
+
+# 🔹 3. `alias.ts` — the **Frontend Page Script / Form Handler**
+
+This is your **browser-side script** that runs in a webpage.
+
+It directly interacts with the **HTML form** — listens for user input, calls `register()`, and updates the DOM.
+
+Example:
+
+```ts
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("register-form");
+  const message = document.getElementById("register-message");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = ...;
+    const email = ...;
+    const password = ...;
+
+    const res = await register({ username, email, password }); // <-- Calls api.ts
+    message.textContent = `✅ Registered successfully! ID: ${res.userId}`;
+  });
+});
+```
+
+✅ `alias.ts` depends on → `register()` from `api.ts`
+✅ `api.ts` depends on → backend routes from `user.ts`
+
+---
+
+# 🔁 How They Work Together
+
+Here’s a **visual summary** of the relationships:
+
+```
+Frontend (Browser)
+ ├── alias.ts (handles DOM, user input)
+ │     ↓ calls
+ ├── api.ts (fetch wrapper to backend)
+ │     ↓ sends HTTP requests
+Backend (Fastify Server)
+ ├── user.ts (defines routes & DB logic)
+ │     ↓ interacts with
+ └── SQLite database (User, UserStats, etc.)
+```
+
+---
+
+# 🧩 Example Flow: “User Registration”
+
+1. **User fills form** on your webpage → presses Submit
+   (handled in `alias.ts`)
+
+2. **`alias.ts`** calls:
+
+   ```ts
+   register({ username, email, password });
+   ```
+
+   (imported from `api.ts`)
+
+3. **`api.ts`** sends a `POST` request to:
+
+   ```
+   https://localhost:3000/api/register
+   ```
+
+   (defined in `user.ts`)
+
+4. **`user.ts`** on the server receives it:
+
+   * Hashes the password
+   * Inserts user into `User` table in SQLite
+   * Returns `{ success: true, userId: 1 }`
+
+5. **Response goes back** to `api.ts`, then `alias.ts`,
+   which displays:
+
+   ```
+   ✅ Registered successfully! ID: 1
+   ```
+
+---
+
+# ✅ In Summary
+
+| File       | Runs Where                | Role                                       | Depends On                   |
+| ---------- | ------------------------- | ------------------------------------------ | ---------------------------- |
+| `user.ts`  | Backend (Fastify)         | Defines API routes (register, login, etc.) | SQLite DB                    |
+| `api.ts`   | Frontend (Browser/Client) | Provides functions to call backend routes  | `fetch`, `user.ts` endpoints |
+| `alias.ts` | Frontend (Browser UI)     | Handles HTML form and user interactions    | `api.ts` functions           |
+
+---
