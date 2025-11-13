@@ -251,8 +251,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const accessToken = row?.access_token;
       if (!accessToken) return reply.send({ ok: false, message: "No 42 token stored" });
 
-      // NOTE: 42 does not publicly document a standard revocation endpoint for all instances.
-      // If your campus exposes one, adjust revocationEndpoint accordingly.
+      // NOTE: 42 does not publicly document a standard revocation endpoint for all instances.     
       const revocationEndpoint = process.env.FORTYTWO_REVOCATION_ENDPOINT || "https://api.intra.42.fr/oauth/revoke";
 
       const params = new URLSearchParams();
@@ -297,28 +296,28 @@ export default async function authRoutes(fastify: FastifyInstance) {
       }
 
       // find by username or email (keep existing logic)
-      const dbUser =
+      const user =
         (await fastify.db.get("SELECT * FROM User WHERE username = ?", [suppliedUser])) ||
         (await fastify.db.get("SELECT * FROM User WHERE email = ?", [suppliedUser]));
 
-      if (!dbUser) {
+      if (!user) {
         return reply.code(401).send({ success: false, error: "Invalid credentials" });
       }
 
-      const hashed = dbUser.password || ""; // ensure string
+      const hashed = user.password || ""; // ensure string
       const valid = await bcrypt.compare(password, hashed);
       if (!valid) {
         return reply.code(401).send({ success: false, error: "Invalid credentials" });
       }
 
       // create JWT (include minimal data)
-      const jwtToken = fastify.jwt.sign({ id: dbUser.id, username: dbUser.username });
+      const jwt = fastify.jwt.sign({ id: user.id, username: user.username });
 
       // reply with full object so frontend can store token + cached user
       return reply.send({
         success: true,
-        token: jwtToken,
-        user: { id: dbUser.id, username: dbUser.username, email: dbUser.email ?? null }
+        token: jwt,
+        user: { id: user.id, username: user.username, email: user.email ?? null }
       });
     } catch (err: unknown) {
       if (err instanceof Error) {

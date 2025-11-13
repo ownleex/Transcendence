@@ -537,102 +537,6 @@ document.querySelectorAll('a[data-oauth]').forEach(a => {
             console.log('Navigating to Home section');
         });
     </script>
-<!--
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const params = new URLSearchParams(window.location.search);
-            const token = params.get('token');
-            const pathname = window.location.pathname;
-
-            // ✅ 1. Handle /reset-password?token=... FIRST — prevents Pong from showing
-            if (pathname === '/reset-password' && token) {
-                // Hide everything except reset-section
-                const ids = [
-                    'signin-section',
-                    'register-section',
-                    'forgot-section',
-                    'pong-section'
-                ];
-                ids.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) el.classList.add('hidden');
-                });
-
-                // ✅ Show header and reset form
-                const header1Section = document.getElementById('header1-section');
-                const resetSection = document.getElementById('reset-section');
-
-                if (header1Section) header1Section.classList.remove('hidden');
-                if (resetSection) resetSection.classList.remove('hidden');
-                const resetForm = document.getElementById('reset-form');
-                if (resetForm) resetForm.dataset.token = token;
-
-                // Clean the URL (remove token)
-                const cleanUrl = window.location.origin + window.location.pathname;
-                window.history.replaceState({}, document.title, cleanUrl);
-
-                return;
-            }
-
-            // ===========================
-            // Normal Auth / Pong Handling
-            // ===========================
-            const header1Section = document.getElementById('header1-section');
-            const signinSection = document.getElementById('signin-section');
-            const registerSection = document.getElementById('register-section');
-            const pongSection = document.getElementById('pong-section');
-
-            // Helper: show Pong UI
-            function showPongSection() {
-                if (header1Section) header1Section.classList.add('hidden');
-                if (signinSection) signinSection.classList.add('hidden');
-                if (registerSection) registerSection.classList.add('hidden');
-                if (pongSection) pongSection.classList.remove('hidden');
-            }
-
-            // Helper: show Sign-In UI
-            function showSigninSection() {
-                if (header1Section) header1Section.classList.remove('hidden');
-                if (signinSection) signinSection.classList.remove('hidden');
-                if (registerSection) registerSection.classList.add('hidden');
-                if (pongSection) pongSection.classList.add('hidden');
-            }
-
-            // --- STEP 1: Handle redirect with ?token=... (JWT from login)
-            const params = new URLSearchParams(window.location.search);
-            const qtoken = params.get('token');
-            if (qtoken) {
-                localStorage.setItem('jwt', qtoken);
-
-                const cleanUrl = window.location.origin + window.location.pathname;
-                window.history.replaceState({}, document.title, cleanUrl);
-
-                showPongSection();
-                return;
-            }
-
-            // --- STEP 2: Returning user (already signed in)
-            const storedJwt = localStorage.getItem('jwt');
-            if (storedJwt) {
-                showPongSection();
-            } else {
-                showSigninSection();
-            }
-            // --- STEP 3: Logout button handler
-            const logoutBtn = document.getElementById('logoutBtn');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    localStorage.removeItem('jwt');
-                    localStorage.removeItem('token');
-                    sessionStorage.removeItem('token');
-                    sessionStorage.removeItem('jwt');
-                    showSigninSection();
-                });
-            }
-        });
-    </script>
-  -->
     <script>
         (function bootstrapAuthAndUI() {
         // Helper UI toggles (no-ops if elements missing)
@@ -901,120 +805,7 @@ document.querySelectorAll('a[data-oauth]').forEach(a => {
             // you may want to ensure showSection is defined. If not, the Back buttons will still work
             // if they navigate elsewhere. (Not altered here.)
         })();
-    </script>
-    <!--
-      <script>
-          (function () {
-              const menuBtn = document.getElementById('userMenuBtn');
-              const dropdown = document.getElementById('userMenuDropdown');
-              const chevron = document.getElementById('userMenuChevron');
-              const root = document.getElementById('user-menu-root');
-
-              // Panel IDs used in your markup
-              const panelIds = ['profile-panel', 'friends-panel', 'matches-panel'];
-
-              // show a specific panel (hide others)
-              function showPanel(panelId) {
-                  panelIds.forEach(id => {
-                      const el = document.getElementById(id);
-                      if (!el) return;
-                      if (id === panelId) {
-                          el.classList.remove('hidden');
-                          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      } else {
-                          el.classList.add('hidden');
-                      }
-                  });
-              }
-
-              function toggleMenu(open) {
-                  const isOpen = !dropdown.classList.contains('hidden');
-                  const shouldOpen = (typeof open === 'boolean') ? open : !isOpen;
-
-                  if (shouldOpen) {
-                      dropdown.classList.remove('hidden');
-                      menuBtn.setAttribute('aria-expanded', 'true');
-                      chevron.classList.add('rotate-180');
-                  } else {
-                      dropdown.classList.add('hidden');
-                      menuBtn.setAttribute('aria-expanded', 'false');
-                      chevron.classList.remove('rotate-180');
-                  }
-              }
-
-              // Toggle on button click (don’t let it bubble)
-              menuBtn.addEventListener('click', (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.stopImmediatePropagation();
-                  toggleMenu();
-              });
-
-              // Prevent clicks inside the dropdown from bubbling up (important!)
-              dropdown.addEventListener('click', (e) => {
-                  e.stopPropagation();
-                  e.stopImmediatePropagation();
-              });
-
-              // Prevent any capturing document handlers (like global click events)
-              // from reacting when clicking inside the menu
-              document.addEventListener('click', (e) => {
-                  if (root.contains(e.target)) {
-                      e.stopPropagation();
-                      // prevent the Pong-section handler from firing
-                  }
-              }, true); // use capture phase
-
-              // Close when clicking outside
-              document.addEventListener('click', (e) => {
-                  if (!root.contains(e.target)) toggleMenu(false);
-              });
-
-              // Close on Escape key
-              document.addEventListener('keydown', (e) => {
-                  if (e.key === 'Escape') toggleMenu(false);
-              });
-
-              // Menu item click — prevent fallthrough
-              dropdown.querySelectorAll('[role="menuitem"]').forEach(btn => {
-                  btn.addEventListener('click', (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.stopImmediatePropagation();
-
-                      const target = btn.getAttribute('data-target');
-                      toggleMenu(false);
-
-                      // small delay for smoothness
-                      setTimeout(() => showPanel(target), 100);
-                  });
-              });
-
-              // Optional: quick-access buttons
-              const quickMapping = [
-                  { sel: 'profileBtnQuick', target: 'profile-panel' },
-                  { sel: 'friendsBtnQuick', target: 'friends-panel' },
-                  { sel: 'profileBtn', target: 'profile-panel' },
-                  { sel: 'friendsBtn', target: 'friends-panel' },
-              ];
-              quickMapping.forEach(m => {
-                  const el = document.getElementById(m.sel);
-                  if (el) {
-                      el.addEventListener('click', (ev) => {
-                          ev.preventDefault();
-                          ev.stopPropagation();
-                          showPanel(m.target);
-                          setTimeout(() => {
-                              const p = document.getElementById(m.target);
-                              if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }, 50);
-                      });
-                  }
-              });
-
-          })();
-      </script>
-    -->
+    </script>   
     <script>
         /* Utility to show a single section by id */
         function showSection(id) {
@@ -1094,7 +885,6 @@ document.querySelectorAll('a[data-oauth]').forEach(a => {
         });
     </script>   
     <!-- Login function (example) -->
-    <!-- 
     <script>
         async function login(username, password) {
             const resp = await fetch('/api/auth/signin', {
@@ -1115,44 +905,7 @@ document.querySelectorAll('a[data-oauth]').forEach(a => {
 
             return data;
         }
-    </script>  
-    -->
-    <script>
-    async function login({ username, password, otpToken = undefined, type = 'local' }) {
-        let url = '/api/auth/signin';  // Default to local login
-
-        if (type === 'github') {
-            url = '/api/auth/callback/github';
-        } else if (type === 'fortytwo') {
-            url = '/api/auth/callback/42';
-        }
-
-        // For OAuth-based logins (GitHub, 42 Intra), the token would already be handled via the callback
-        const body = type === 'local' 
-            ? JSON.stringify({ username, password, token: otpToken })
-            : undefined;
-
-        const resp = await fetch(url, {
-            method: type === 'local' ? 'POST' : 'GET',  // POST for local, GET for OAuth callbacks
-            headers: { 'Content-Type': 'application/json' },
-            body
-        });
-
-        const data = await resp.json();
-        if (!resp.ok || !data.success) throw new Error(data.error || 'Login failed');
-
-        // Store JWT and user data in localStorage
-        localStorage.setItem('jwt', data.token);
-        localStorage.setItem('me', JSON.stringify(data.user || {}));
-
-        // Refresh the UI
-        window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
-        window.loadCurrentUser?.();
-
-        return data;
-    }
-    </script>
-  
+    </script>    
     <!-- Load current user and show username to the right of avatar -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
