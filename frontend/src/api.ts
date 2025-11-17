@@ -47,6 +47,10 @@ export const getFriends = (userId: number) =>
 export const getIncomingRequests = (userId: number) =>
     request(`/user/${userId}/friend-requests`);
 
+export const getSentRequests = (userId: number) =>
+    request(`/user/${userId}/sent-requests`);
+
+
 // --- STATS ---
 export const getUserProfile = (userId: number) =>
   request(`/user/${userId}`);

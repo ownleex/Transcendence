@@ -5,7 +5,7 @@ import qrcode from "qrcode";
 import fs from "fs";
 import path from "path";
 import fetch from 'node-fetch';
-//import { onlineUsers } from "./socket";
+import { onlineUsers } from "./socket";
 export default async function userRoutes(fastify: FastifyInstance) {
 
   // ----------------------------
@@ -238,62 +238,6 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     }
 );
 
- // ----------------------------
-  // Match complete — update stats + ELO
-  // ----------------------------
-  fastify.post("/match/complete", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const { winnerId, loserId } = req.body as any;
-
-    if (!winnerId || !loserId) {
-      return reply.code(400).send({ success: false, error: "winnerId and loserId required" });
-    }
-
-    try {
-      const winnerStats = await fastify.db.get("SELECT * FROM UserStats WHERE user_id = ?", [winnerId]);
-      const loserStats = await fastify.db.get("SELECT * FROM UserStats WHERE user_id = ?", [loserId]);
-
-      if (!winnerStats || !loserStats)
-        return reply.code(404).send({ success: false, error: "Stats not found for one or both users" });
-
-      // --- ELO System ---
-      const k = 32;
-      const expectedWinner = 1 / (1 + Math.pow(10, (loserStats.elo - winnerStats.elo) / 400));
-      const expectedLoser = 1 - expectedWinner;
-
-      const newWinnerElo = Math.round(winnerStats.elo + k * (1 - expectedWinner));
-      const newLoserElo = Math.round(loserStats.elo + k * (0 - expectedLoser));
-
-      // --- Update stats ---
-      const winnerMatches = winnerStats.matches_played + 1;
-      const loserMatches = loserStats.matches_played + 1;
-
-      const newWinnerWinrate =
-        ((winnerStats.winrate * winnerStats.matches_played + 1) / winnerMatches) * 100;
-      const newLoserWinrate =
-        ((loserStats.winrate * loserStats.matches_played) / loserMatches) * 100;
-
-      await fastify.db.run(
-        "UPDATE UserStats SET elo=?, matches_played=?, winrate=? WHERE user_id=?",
-        [newWinnerElo, winnerMatches, newWinnerWinrate, winnerId]
-      );
-
-      await fastify.db.run(
-        "UPDATE UserStats SET elo=?, matches_played=?, winrate=? WHERE user_id=?",
-        [newLoserElo, loserMatches, newLoserWinrate, loserId]
-      );
-
-      reply.send({
-        success: true,
-        updated: {
-          winner: { id: winnerId, elo: newWinnerElo, winrate: newWinnerWinrate },
-          loser: { id: loserId, elo: newLoserElo, winrate: newLoserWinrate },
-        },
-      });
-    } catch (err: any) {
-      reply.code(500).send({ success: false, error: err.message });
-    }
-  });
-
   // ----------------------------
   // Send friend request using username
   // ----------------------------
@@ -316,7 +260,8 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     }
   });
   */
-// Send friend request using username
+    // Send friend request using username
+/*
 fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { username } = req.body as any;
     const userId = req.user.id; // from JWT
@@ -348,7 +293,7 @@ fastify.get("/user/:id/friend-requests", { preHandler: [fastify.authenticate] },
     const { id } = req.params as any;
 
     try {
-        const requests = await fastify.db.all(
+        const rows = await fastify.db.all(
             `SELECT f.user_id AS id, u.username
             FROM Friend f
             JOIN User u ON f.user_id = u.id
@@ -356,11 +301,109 @@ fastify.get("/user/:id/friend-requests", { preHandler: [fastify.authenticate] },
             [id]
         );
 
-        reply.send({ success: true, requests });
+        reply.send({ success: true, rows });
     } catch (err: any) {
         reply.code(500).send({ success: false, error: err.message });
     }
 });
+*/
+    // Send friend request
+    fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        // --- DEBUG LOGS ---
+        console.log("Friend request body:", req.body);
+        console.log("Authenticated user:", req.user);
+        const { username } = req.body as any;
+        const userId = req.user.id;
+
+        if (!username) return reply.code(400).send({ success: false, error: "Username required" });
+
+        try {
+            const friend = await fastify.db.get("SELECT id FROM User WHERE username = ?", [username]);
+            if (!friend) return reply.code(404).send({ success: false, error: "User not found" });
+            if (friend.id === userId) return reply.code(400).send({ success: false, error: "Cannot add yourself" });
+
+            // Prevent duplicate requests
+            const existing = await fastify.db.get(
+                "SELECT 1 FROM Friend WHERE user_id=? AND friend_id=?",
+                [userId, friend.id]
+            );
+            if (existing) return reply.code(400).send({ success: false, error: "Friend request already sent" });
+
+            await fastify.db.run(
+                "INSERT INTO Friend (user_id, friend_id, status) VALUES (?, ?, 'pending')",
+                [userId, friend.id]
+            );
+            // --- Add notification for recipient ---
+            const sender = await fastify.db.get("SELECT username FROM User WHERE id = ?", [userId]);
+            const title = "New Friend Request";
+            const type = "friend_request";
+            const data = JSON.stringify({ fromUserId: userId, fromUsername: sender.username });
+
+            await fastify.db.run(
+                "INSERT INTO Notification (title, type, data, owner_id) VALUES (?, ?, ?, ?)",
+                [title, type, data, friend.id]
+            );
+            reply.send({ success: true, friendId: friend.id });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
+    //Request sent
+    fastify.get("/user/:id/sent-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const { id } = req.params as any;
+        try {
+            const sent = await fastify.db.all(
+                `SELECT f.friend_id AS id, u.username
+                 FROM Friend f
+                 JOIN User u ON f.friend_id = u.id
+                 WHERE f.user_id = ? AND f.status = 'pending'`,
+                [id]
+            );
+            reply.send({ success: true, sent });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
+
+    // Incoming friend requests
+    fastify.get("/user/:id/friend-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const { id } = req.params as any;
+
+        try {
+            const requests = await fastify.db.all(
+             `SELECT f.user_id AS id, u.username
+             FROM Friend f
+             JOIN User u ON f.user_id = u.id
+             WHERE f.friend_id = ? AND f.status = 'pending'`,
+                [id]
+            );
+            reply.send({ success: true, requests }); // ✅ fixed variable
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
+
+    // List friends with online info
+    fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const { id } = req.params as any;
+        try {
+            const friends = await fastify.db.all(
+                `SELECT f.friend_id AS id, u.username, f.status
+                 FROM Friend f
+                 JOIN User u ON f.friend_id = u.id
+                 WHERE f.user_id = ? AND f.status='accepted'`,
+                [id]
+            );
+
+            const result = friends.map((f: any) => ({
+                ...f,
+                online: onlineUsers.has(f.id)
+            }));
+            reply.send({ success: true, friends: result });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
 
   // ----------------------------
   // Accept friend request
@@ -396,26 +439,32 @@ fastify.get("/user/:id/friend-requests", { preHandler: [fastify.authenticate] },
       reply.code(500).send({ success: false, error: err.message });
     }
   });
-
+  /*
   // ----------------------------
-  // List friends
+    // List friends with online status
     // ----------------------------
     fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
         try {
             const friends = await fastify.db.all(
                 `SELECT f.friend_id AS id, u.username, f.status
-         FROM Friend f
-         JOIN User u ON f.friend_id = u.id
-         WHERE f.user_id = ?`,
+                 FROM Friend f
+                 JOIN User u ON f.friend_id = u.id
+                 WHERE f.user_id = ? AND f.status = 'accepted'`,
                 [id]
             );
-            reply.send({ success: true, friends });
+            // Add real-time online info
+            const result = friends.map((f: any) => ({
+                ...f,
+                online: onlineUsers.has(f.id)
+            }));
+            reply.send({ success: true, friends: result });
         } catch (err: any) {
             reply.code(500).send({ success: false, error: err.message });
         }
     });
-  /*
+    */
+    /*
 fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { id } = req.params as any;
 
@@ -454,7 +503,61 @@ fastify.get("/user/:id/matches", async (req, reply) => {
     reply.code(500).send({ success: false, error: err.message });
   }
 });
+    // ----------------------------
+    // Match complete — update stats + ELO
+    // ----------------------------
+    fastify.post("/match/complete", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const { winnerId, loserId } = req.body as any;
 
+        if (!winnerId || !loserId) {
+            return reply.code(400).send({ success: false, error: "winnerId and loserId required" });
+        }
+
+        try {
+            const winnerStats = await fastify.db.get("SELECT * FROM UserStats WHERE user_id = ?", [winnerId]);
+            const loserStats = await fastify.db.get("SELECT * FROM UserStats WHERE user_id = ?", [loserId]);
+
+            if (!winnerStats || !loserStats)
+                return reply.code(404).send({ success: false, error: "Stats not found for one or both users" });
+
+            // --- ELO System ---
+            const k = 32;
+            const expectedWinner = 1 / (1 + Math.pow(10, (loserStats.elo - winnerStats.elo) / 400));
+            const expectedLoser = 1 - expectedWinner;
+
+            const newWinnerElo = Math.round(winnerStats.elo + k * (1 - expectedWinner));
+            const newLoserElo = Math.round(loserStats.elo + k * (0 - expectedLoser));
+
+            // --- Update stats ---
+            const winnerMatches = winnerStats.matches_played + 1;
+            const loserMatches = loserStats.matches_played + 1;
+
+            const newWinnerWinrate =
+                ((winnerStats.winrate * winnerStats.matches_played + 1) / winnerMatches) * 100;
+            const newLoserWinrate =
+                ((loserStats.winrate * loserStats.matches_played) / loserMatches) * 100;
+
+            await fastify.db.run(
+                "UPDATE UserStats SET elo=?, matches_played=?, winrate=? WHERE user_id=?",
+                [newWinnerElo, winnerMatches, newWinnerWinrate, winnerId]
+            );
+
+            await fastify.db.run(
+                "UPDATE UserStats SET elo=?, matches_played=?, winrate=? WHERE user_id=?",
+                [newLoserElo, loserMatches, newLoserWinrate, loserId]
+            );
+
+            reply.send({
+                success: true,
+                updated: {
+                    winner: { id: winnerId, elo: newWinnerElo, winrate: newWinnerWinrate },
+                    loser: { id: loserId, elo: newLoserElo, winrate: newLoserWinrate },
+                },
+            });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
 // ----------------------------
 // Update Display Name
 // ----------------------------
@@ -535,3 +638,4 @@ fastify.post(
   }
 );
 }
+

@@ -322,7 +322,11 @@
 
                         <div class="mt-6">
                             <h5 class="font-medium">Incoming requests</h5>
-                            <div id="friends-incoming" class="mt-2 text-sm text-gray-500">Server may not expose incoming requests via the simple friends list.</div>
+                            <div id="friends-incoming" class="mt-2 text-sm text-gray-500"></div>
+                        </div>
+                        <div class="mt-6">
+                            <h5 class="font-medium">Sent requests</h5>
+                            <div id="friends-sent" class="mt-2 text-sm text-gray-500"></div>
                         </div>
                     </div>
                 </div>
@@ -1062,6 +1066,16 @@
                 incoming.appendChild(div);
             });
         }
+        // Sent request
+        const { sent } = await getSentRequests(me.id);
+        const sentEl = document.getElementById("friends-sent");
+        sentEl.innerHTML = "";
+        sent.forEach(r => {
+            const div = document.createElement("div");
+            div.className = "p-2 border rounded mb-2 flex justify-between";
+            div.innerHTML = `<span>${r.username}</span><span class="text-yellow-500">Pending</span>`;
+            sentEl.appendChild(div);
+        });
 
         // Accept Friend
         async function acceptFriendRequest(userId, friendId) {
@@ -1092,8 +1106,44 @@
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || "Failed");
 
+                // Show message
                 messageEl.textContent = `Friend request sent to ${username}`;
-                loadFriends(); // Refresh friends list
+
+                // Refresh friends panel, including pending requests
+                const { friends } = await getFriends(me.id);
+                const { requests } = await getIncomingRequests(me.id);
+
+                const listEl = document.getElementById("friends-list");
+                const incoming = document.getElementById("friends-incoming");
+
+                // Clear and update friends list
+                listEl.innerHTML = "";
+                friends.forEach(f => {
+                    const div = document.createElement("div");
+                    div.className = "p-2 border rounded mb-2 flex justify-between";
+                    div.innerHTML = `
+                        <span>${f.username}</span>
+                        <span class="${f.online ? "text-green-500" : "text-gray-500"}">
+                            ${f.online ? "● online" : "○ offline"}
+                        </span>
+                    `;
+                    listEl.appendChild(div);
+                });
+
+                // Clear and update incoming requests
+                incoming.innerHTML = "";
+                requests.forEach(r => {
+                    const div = document.createElement("div");
+                    div.className = "p-2 border rounded mb-2 flex justify-between";
+                    div.innerHTML = `
+                        <span>${r.username}</span>
+                        <button class="bg-green-600 text-white px-2 rounded"
+                            onclick="acceptFriendRequest(${me.id}, ${r.id})">
+                            Accept
+                        </button>
+                    `;
+                    incoming.appendChild(div);
+                });
             } catch (err: any) {
                 messageEl.textContent = err.message;
             }

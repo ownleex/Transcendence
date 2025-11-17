@@ -380,6 +380,16 @@ console.log(localStorage.getItem('jwt'));
 Check if localStorage.getItem('me') contains the user data:
 console.log('User in localStorage:', JSON.parse(localStorage.getItem('me')));
 
+Check friend added:
+curl -X POST http://localhost:3000/api/user/friend-by-username \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "friend_username"}'
+
+curl -X POST http://localhost:3000/api/user/friend-by-username \
+  -H "Authorization: Bearer eyJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"username": "Alice"}'
 
 https://developer.mozilla.org/en-US/docs/Web/API/Document
 
