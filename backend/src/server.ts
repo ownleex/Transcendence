@@ -1,3 +1,4 @@
+
 import path from "path";
 import Fastify from "fastify";
 import fastifyMultipart from "@fastify/multipart";
@@ -17,7 +18,7 @@ import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notification";
 import { setupWebSocket } from "./ws/game";
 import authRoutes from "./routes/auth";
-
+//import socketPlugin from "./routes/socket";
 // -------------------------
 // Load environment variables
 // -------------------------

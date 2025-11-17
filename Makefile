@@ -32,6 +32,7 @@ clean:
 
 fclean: clean
 	@echo "$(RED)🧹 Cleaning Docker system...$(NC)"
+	@docker compose down --volumes --remove-orphans
 	@docker system prune -af --volumes
 	@echo "$(GREEN)✓ System cleaned!$(NC)"
 

@@ -5,7 +5,7 @@ import qrcode from "qrcode";
 import fs from "fs";
 import path from "path";
 import fetch from 'node-fetch';
-
+//import { onlineUsers } from "./socket";
 export default async function userRoutes(fastify: FastifyInstance) {
 
   // ----------------------------
@@ -182,7 +182,28 @@ export default async function userRoutes(fastify: FastifyInstance) {
         if (/^https?:\/\//i.test(avatar)) return avatar;
         const filename = path.basename(avatar);
         return `/uploads/${filename}`;
-   }
+    }
+    async function getFullUserProfile(db: any, userId: number) {
+        return db.get(
+            `SELECT 
+            u.id,
+            u.username,
+            u.email,
+            u.avatar,
+            p.nickname,
+            p.elo,
+            p.rank,
+            us.matches_played,
+            us.winrate,
+            us.friends
+        FROM User u
+        LEFT JOIN Player p ON u.id = p.user_id AND p.tournament_id = 1
+        LEFT JOIN UserStats us ON u.id = us.user_id
+        WHERE u.id = ?`,
+            [userId]
+        );
+    }
+
   // ----------------------------
   // Get user profile by ID (with stats)
   // ----------------------------
@@ -190,16 +211,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
 
       try {
-          const user = await fastify.db.get(
-              `SELECT 
-          u.id, u.username, u.email, u.twofa_secret,
-          s.elo, s.matches_played, s.winrate, s.friends
-         FROM User u
-         LEFT JOIN UserStats s ON u.id = s.user_id
-         WHERE u.id = ?`,
-              [id]
-          );
-
+          const user = await getFullUserProfile(fastify.db, Number(id));       
           if (!user) return reply.code(404).send({ success: false, error: "User not found" });
           const avatar = normalizeAvatar(user.avatar);
           reply.send({ success: true, user: { ...user, avatar } });
@@ -211,29 +223,11 @@ export default async function userRoutes(fastify: FastifyInstance) {
 fastify.get("/me", { preHandler: [fastify.authenticate] },
     async (req: FastifyRequest, reply: FastifyReply) => {
 
-        const userId = (req as any).user?.id ?? ((req as any).session?.userId);
+        //const userId = (req as any).user?.id ?? ((req as any).session?.userId);
+        const userId = req.user?.id;
         if (!userId) return reply.code(401).send({ success: false, error: 'Not authenticated' });
         try {
-            const user = await fastify.db.get(
-                `SELECT 
-                    u.id,
-                    u.username,
-                    u.email,
-                    u.avatar,
-                    p.nickname,
-                    p.elo,
-                    p.rank,
-                    us.matches_played,
-                    us.winrate
-                    FROM User u
-                    LEFT JOIN Player p 
-                    ON u.id = p.user_id 
-                    AND p.tournament_id = 1       -- ← choose your default tournament
-                    LEFT JOIN UserStats us 
-                    ON u.id = us.user_id
-                    WHERE u.id = ?`,
-                [userId]
-            );
+            const user = await getFullUserProfile(fastify.db, Number(userId));        
             if (!user) return reply.code(404).send({ success: false, error: "User not found" });
 
             const avatar = normalizeAvatar(user.avatar);
@@ -243,31 +237,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
         }
     }
 );
-/*
-fastify.get("/me", { preHandler: [fastify.authenticate] },
-  async (req: FastifyRequest, reply: FastifyReply) => {
-    // adapt this to how you attach the authenticated user id
-      const userId = (req as any).user?.id ?? ((req as any).session?.userId);
-    if (!userId) return reply.code(401).send({ success: false, error: 'Not authenticated' });
 
-    try {
-      const user = await fastify.db.get(
-        `SELECT u.id, u.username, u.email, u.avatar, s.elo, s.matches_played, s.winrate
-         FROM User u
-         LEFT JOIN UserStats s ON u.id = s.user_id
-         WHERE u.id = ?`,
-        [userId]
-      );
-
-      if (!user) return reply.code(404).send({ success: false, error: "User not found" });
-      const avatar = normalizeAvatar(user.avatar);
-        reply.send({ success: true, user: { ...user, avatar } });
-    } catch (err: any) {
-        reply.code(500).send({ success: false, error: err.message });
-    }
-  }
-);
-*/
  // ----------------------------
   // Match complete — update stats + ELO
   // ----------------------------
@@ -325,8 +295,9 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
   });
 
   // ----------------------------
-  // Send friend request
+  // Send friend request using username
   // ----------------------------
+  /*
   fastify.post("/friend", { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { userId, friendId } = req.body as any;
 
@@ -344,6 +315,52 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
       reply.code(400).send({ success: false, error: "Friendship already exists" });
     }
   });
+  */
+// Send friend request using username
+fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { username } = req.body as any;
+    const userId = req.user.id; // from JWT
+
+    if (!username) return reply.code(400).send({ success: false, error: "Username required" });
+
+    try {
+        // Lookup friend by username
+        const friend = await fastify.db.get("SELECT id FROM User WHERE username = ?", [username]);
+        if (!friend) return reply.code(404).send({ success: false, error: "User not found" });
+
+        if (friend.id === userId)
+            return reply.code(400).send({ success: false, error: "Cannot add yourself" });
+
+        // Insert friend request
+        await fastify.db.run(
+            "INSERT INTO Friend (user_id, friend_id, status) VALUES (?, ?, 'pending')",
+            [userId, friend.id]
+        );
+
+        reply.send({ success: true, friendId: friend.id });
+    } catch (err: any) {
+        reply.code(400).send({ success: false, error: err.message });
+    }
+});
+
+// INCOMING FRIEND REQUESTS (pending)
+fastify.get("/user/:id/friend-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { id } = req.params as any;
+
+    try {
+        const requests = await fastify.db.all(
+            `SELECT f.user_id AS id, u.username
+            FROM Friend f
+            JOIN User u ON f.user_id = u.id
+            WHERE f.friend_id = ? AND f.status = 'pending'`,
+            [id]
+        );
+
+        reply.send({ success: true, requests });
+    } catch (err: any) {
+        reply.code(500).send({ success: false, error: err.message });
+    }
+});
 
   // ----------------------------
   // Accept friend request
@@ -382,23 +399,46 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
 
   // ----------------------------
   // List friends
-  // ----------------------------
-  fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const { id } = req.params as any;
-    try {
-      const friends = await fastify.db.all(
-        `SELECT f.friend_id AS id, u.username, f.status
+    // ----------------------------
+    fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const { id } = req.params as any;
+        try {
+            const friends = await fastify.db.all(
+                `SELECT f.friend_id AS id, u.username, f.status
          FROM Friend f
          JOIN User u ON f.friend_id = u.id
          WHERE f.user_id = ?`,
-        [id]
-      );
-      reply.send({ success: true, friends });
-    } catch (err: any) {
-      reply.code(500).send({ success: false, error: err.message });
-    }
-  });
+                [id]
+            );
+            reply.send({ success: true, friends });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
+  /*
+fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { id } = req.params as any;
 
+    try {
+        const friends = await fastify.db.all(
+            `SELECT f.friend_id AS id, u.username, f.status
+    FROM Friend f
+    JOIN User u ON f.friend_id = u.id
+    WHERE f.user_id = ? AND f.status = 'accepted'`,
+            [id]
+        );
+
+        // Add online status
+        const list = friends.map((f: { id: number; username: string; status: string }) => ({
+            ...f,
+            online: onlineUsers.has(f.id)
+        }));
+        reply.send({ success: true, friends: list });
+    } catch (err: any) {
+        reply.code(500).send({ success: false, error: err.message });
+    }
+});
+*/
 // ----------------------------
 // Get Match History
 // ----------------------------
@@ -418,34 +458,7 @@ fastify.get("/user/:id/matches", async (req, reply) => {
 // ----------------------------
 // Update Display Name
 // ----------------------------
-/*
-    fastify.put("/displayname", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-  const { nickname } = req.body as any;
-  const userId = req.user.id;
 
-  if (!nickname) return reply.code(400).send({ success: false, error: "Nickname required" });
-
-  try {
-    const existing = await fastify.db.get("SELECT * FROM Player WHERE nickname = ?", [nickname]);
-    if (existing) return reply.code(409).send({ success: false, error: "Nickname already taken" });
-    // try update
-    const result = await fastify.db.run(
-        "UPDATE Player SET nickname = ? WHERE user_id = ? AND tournament_id = 1",
-        [nickname.trim(), userId]
-    );
-    // if no rows updated, insert
-    if (result.changes === 0) {
-        await fastify.db.run(
-            "INSERT INTO Player (user_id, tournament_id, nickname) VALUES (?, 1, ?)",
-            [userId, nickname.trim()]
-        );
-    }    
-    reply.send({ success: true, message: "Display name updated" });
-  } catch (err: any) {
-    reply.code(500).send({ success: false, error: err.message });
-  }
-});
-*/
 fastify.put("/displayname", { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { nickname } = req.body as any;
     const userId = req.user.id;

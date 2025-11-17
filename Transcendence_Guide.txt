@@ -21,6 +21,7 @@ transcendence-42/
 │   │   │   ├── tournament.ts                     # Tournament CRUD + match endpoints
 │   │   │   ├── stats.ts                          # Leaderboard + player stats routes
 │   │   │   └── notification.ts                   # Send/store user notifications or alerts
+│   │   │   └── socket.ts  
 │   │   │
 │   │   ├── ws/                                   # ⚡ WebSocket handlers
 │   │   │   └── game.ts                           # Real-time Pong game server (player sync, match logic)
@@ -334,6 +335,9 @@ npm install fastify nodemailer crypto
 npm install -D typescript @types/node @types/nodemailer ts-node
 npm install dotenv
 npm install -D @types/dotenv
+npm install socket.io
+npm install -D @types/socket.io
+
 
 rm backend/data/database.sqlite
 sqlite3 backend/data/database.sqlite < backend/src/db/schema.sql
