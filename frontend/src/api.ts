@@ -42,7 +42,10 @@ export const acceptFriend = (userId: number, friendId: number) =>
   request("/friend/accept", { method: "PUT", body: JSON.stringify({ userId, friendId }) });
 
 export const getFriends = (userId: number) =>
-  request(`/user/${userId}/friends`);
+    request(`/user/${userId}/friends`);
+
+export const getIncomingRequests = (userId: number) =>
+    request(`/user/${userId}/friend-requests`);
 
 // --- STATS ---
 export const getUserProfile = (userId: number) =>

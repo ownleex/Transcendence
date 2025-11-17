@@ -179,11 +179,59 @@ export default async function authRoutes(fastify: FastifyInstance) {
       reply.code(500).send({ error: "GitHub authentication failed", details: err.message ?? "see server logs" });
     }
   });
+    // =====================================================
+    // 42 FULL LOGOUT: clears your tokens + 42 session cookie
+    // =====================================================
+    fastify.get("/api/auth/logout/42", async (req, reply) => {
+        try {
+            reply.clearCookie("token");
+
+            const authHeader = (req.headers as any).authorization || "";
+            const jwt = authHeader.replace(/^Bearer\s+/i, "");
+            if (jwt) {
+                try {
+                    const payload = fastify.jwt.verify(jwt) as any;
+                    await clearOAuthTokens(fastify, payload.id, "42");
+                } catch (_) { }
+            }                
+
+            // IMPORTANT: redirect to SIGNIN, not callback
+            const redirectBack = encodeURIComponent("https://localhost:3000/api/auth/signin");
+            return reply.redirect(`https://auth.intra.42.fr/logout?redirect=${redirectBack}`);
+        } catch (err) {
+            fastify.log.error(err);
+            reply.code(500).send({ error: "42 logout failed" });
+        }
+    });
+
+    // =====================================================
+    // GitHub FULL LOGOUT: clears your tokens + GitHub cookie
+    // =====================================================
+    fastify.get("/api/auth/logout/github", async (req, reply) => {
+        try {
+            reply.clearCookie("token");
+
+            const authHeader = (req.headers as any).authorization || "";
+            const jwt = authHeader.replace(/^Bearer\s+/i, "");
+            if (jwt) {
+                try {
+                    const payload = fastify.jwt.verify(jwt) as any;
+                    await clearOAuthTokens(fastify, payload.id, "github");
+                } catch (_) { }
+            } 
+
+            return reply.redirect("https://localhost:3000/api/auth/github/login");
+        } catch (err) {
+            fastify.log.error(err);
+            reply.code(500).send({ error: "GitHub logout failed" });
+        }
+    });
 
   // ---------------------------------------------------------------------------
   // Revoke endpoints (logout helpers)
   // ---------------------------------------------------------------------------
-  // Revoke GitHub token (DELETE /applications/:client_id/tokens/:access_token)
+    // Revoke GitHub token (DELETE /applications/:client_id/tokens/:access_token)
+  
   fastify.post("/api/auth/revoke/github", async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const authHeader = (req.headers as any).authorization || "";
@@ -280,7 +328,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: "Server error" });
     }
   });
-
+  
   // ---------------------------------------------------------------------------
   // Login
   // ---------------------------------------------------------------------------  

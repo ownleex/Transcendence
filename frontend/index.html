@@ -256,94 +256,94 @@
                             </button>
                         </div>
                     </div>
-                    <!-- PROFILE PANEL (update display name & avatar) -->
-                    <section id="profile-panel" class="hidden relative z-10 w-full max-w-4xl mt-8">
-                        <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                            <div class="flex items-center gap-6">
-                                <img id="profile-avatar" src="https://i.pravatar.cc/80" class="w-20 h-20 rounded-full border" />
-                                <div>
-                                    <div id="profile-username" class="text-xl font-semibold">—</div>
-                                    <div id="profile-email" class="text-sm text-gray-500">—</div>
-                                    <div class="mt-2 text-sm text-gray-600">ELO: <span id="profile-elo">—</span> • Matches: <span id="profile-matches">—</span> • Winrate: <span id="profile-winrate">—</span></div>
-                                </div>
-                            </div>
-
-                            <hr class="my-4">
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="font-semibold mb-2">Change display name</h4>
-                                    <form id="displayname-form" class="flex gap-2">
-                                        <input id="displayname-input" type="text" class="border p-2 rounded w-full" placeholder="Nickname / display name" />
-                                        <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Update</button>
-                                    </form>
-                                    <p id="displayname-message" class="mt-2 text-sm text-gray-600"></p>
-                                </div>
-
-                                <div>
-                                    <h4 class="font-semibold mb-2">Upload avatar</h4>
-                                    <form id="avatar-form" class="flex flex-col gap-2">
-                                        <input id="avatar-file" type="file" accept="image/*" />
-                                        <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded w-32 cursor-pointer">Upload</button>
-                                    </form>
-                                    <p id="avatar-message" class="mt-2 text-sm text-gray-600"></p>
-                                </div>
-                            </div>
-
-                            <div class="mt-4">
-                                <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- FRIENDS PANEL -->
-                    <section id="friends-panel" class="hidden w-full max-w-4xl mt-8">
-                        <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                            <h3 class="text-lg font-semibold mb-3">Friends</h3>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="font-medium">Your friends</h4>
-                                    <div id="friends-list" class="mt-3"></div>
-                                </div>
-
-                                <div>
-                                    <h4 class="font-medium">Add a friend</h4>
-                                    <form id="friend-send-form" class="flex gap-2 mt-3">
-                                        <input id="friend-id-input" class="border p-2 rounded w-full" placeholder="Friend user ID (numeric)" />
-                                        <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Send</button>
-                                    </form>
-                                    <p id="friend-send-message" class="mt-2 text-sm text-gray-600"></p>
-
-                                    <div class="mt-6">
-                                        <h5 class="font-medium">Incoming requests</h5>
-                                        <div id="friends-incoming" class="mt-2 text-sm text-gray-500">Server may not expose incoming requests via the simple friends list.</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="mt-4">
-                                <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- MATCH HISTORY PANEL -->
-                    <section id="matches-panel" class="hidden w-full max-w-4xl mt-8">
-                        <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                            <h3 class="text-lg font-semibold mb-3">Match history</h3>
-                            <div id="matches-list"></div>
-
-                            <div class="mt-4">
-                                <button onclick="showSection('pong-section')" class="px-3 py-1 bg-gray-200 rounded cursor-pointer">Back</button>
-                            </div>
-                        </div>
-                    </section>
                     <!-- Logout -->
                     <a href="#" id="logoutBtn" class="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm focus:ring-2 focus:ring-blue-400">Sign out</a>
                 </nav>
             </div>
         </header>
+        <!-- PROFILE PANEL (update display name & avatar) -->
+        <section id="profile-panel" class="hidden relative z-10 w-full max-w-4xl mt-8">
+            <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
+                <div class="flex items-center gap-6">
+                    <img id="profile-avatar" src="https://i.pravatar.cc/80" class="w-20 h-20 rounded-full border" />
+                    <div>
+                        <div id="profile-username" class="text-xl font-semibold">—</div>
+                        <div id="profile-email" class="text-sm text-gray-500">—</div>
+                        <div class="mt-2 text-sm text-gray-600">ELO: <span id="profile-elo">—</span> • Matches: <span id="profile-matches">—</span> • Winrate: <span id="profile-winrate">—</span></div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-semibold mb-2">Change display name</h4>
+                        <form id="displayname-form" class="flex gap-2">
+                            <input id="displayname-input" type="text" class="border p-2 rounded w-full" placeholder="Nickname / display name" />
+                            <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Update</button>
+                        </form>
+                        <p id="displayname-message" class="mt-2 text-sm text-gray-600"></p>
+                    </div>
+
+                    <div>
+                        <h4 class="font-semibold mb-2">Upload avatar</h4>
+                        <form id="avatar-form" class="flex flex-col gap-2">
+                            <input id="avatar-file" type="file" accept="image/*" />
+                            <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded w-32 cursor-pointer">Upload</button>
+                        </form>
+                        <p id="avatar-message" class="mt-2 text-sm text-gray-600"></p>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- FRIENDS PANEL -->
+        <section id="friends-panel" class="hidden w-full max-w-4xl mt-8">
+            <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-3">Friends</h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="font-medium">Your friends</h4>
+                        <div id="friends-list" class="mt-3"></div>
+                    </div>
+
+                    <div>
+                        <h4 class="font-medium">Add a friend</h4>
+                        <form id="friend-send-form" class="flex gap-2 mt-3">
+                            <input id="friend-username-input" class="border p-2 rounded w-full" placeholder="Friend username" />
+                            <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Send</button>
+                        </form>
+                        <p id="friend-send-message" class="mt-2 text-sm text-gray-600"></p>
+
+                        <div class="mt-6">
+                            <h5 class="font-medium">Incoming requests</h5>
+                            <div id="friends-incoming" class="mt-2 text-sm text-gray-500">Server may not expose incoming requests via the simple friends list.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- MATCH HISTORY PANEL -->
+        <section id="matches-panel" class="hidden w-full max-w-4xl mt-8">
+            <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-3">Match history</h3>
+                <div id="matches-list"></div>
+
+                <div class="mt-4">
+                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-gray-200 rounded cursor-pointer">Back</button>
+                </div>
+            </div>
+        </section>
 
         <!-- Main -->
         <main id="pongContent" class="flex-1 p-8 space-y-10 text-center">
@@ -410,6 +410,8 @@
             document.getElementById('goto-register').addEventListener('click', (e) => {
                 e.preventDefault();
                 showSection('register-section');
+                const header = document.getElementById('header1-section');
+                if (header) header.classList.remove('hidden');
             });
 
             document.getElementById('goto-signin').addEventListener('click', (e) => {
@@ -640,10 +642,14 @@
                     if (res.ok && data.token) {
                         // Save token and show Pong section
                         localStorage.setItem('token', data.token);
+                        localStorage.setItem('jwt', data.token);
                         document.getElementById('header1-section').classList.add('hidden');
                         document.getElementById('signin-section').classList.add('hidden');
                         document.getElementById('register-section').classList.add('hidden');
                         document.getElementById('pong-section').classList.remove('hidden');
+                        // ✅ Update UI immediately
+                        window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
+                        await window.loadCurrentUser();
                     } else {
                         alert(data.error || 'Invalid credentials');
                     }
@@ -786,49 +792,141 @@
         })();
     </script>
     <script>
-        /* Utility to show a single section by id */
-        function showSection(id) {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            const el = document.getElementById(id);
-            if (el) el.classList.remove('hidden');
-        }
-        /* Hook up display name update */
-        document.addEventListener('DOMContentLoaded', () => {
+        (function () {
+            const API_BASE = window.location.origin;
+
+            // Elements
+            const avatarPreview = document.getElementById('profile-avatar');
+            const navAvatar = document.getElementById('nav-avatar');
+            const usernameEl = document.getElementById('nav-username');
             const displayForm = document.getElementById('displayname-form');
             const displayInput = document.getElementById('displayname-input');
             const displayMsg = document.getElementById('displayname-message');
+            const avatarForm = document.getElementById('avatar-form');
+            const avatarFile = document.getElementById('avatar-file');
+            const avatarMsg = document.getElementById('avatar-message');
 
-            displayForm?.addEventListener('submit', async (e) => {
+            // ----------------------------
+            // Utility to show one section
+            // ----------------------------
+            window.showSection = (id) => {
+                document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('hidden');
+                if (id === "profile-panel") {
+                    const me = JSON.parse(localStorage.getItem("me") || "{}");
+                    if (me.id) {
+                        // Use cached info first
+                        const displayName = me.nickname?.trim() || me.username || "";
+                        document.getElementById("profile-username").textContent = displayName;
+                        document.getElementById("profile-email").textContent = me.email;
+                        document.getElementById("profile-elo").textContent = me.elo ?? "0";
+                        document.getElementById("profile-matches").textContent = me.matches_played ?? "0";
+                        document.getElementById("profile-winrate").textContent = (me.winrate ?? 0) + "%";
+                        if (me.avatar) document.getElementById("profile-avatar").src = me.avatar;
+                    }
+                    loadProfile();
+                }
+            }
+            // ----------------------------
+            // Apply user info to UI
+            // ----------------------------
+            function updateAvatar(url) {
+                const avatarUrl = url + '?t=' + Date.now(); // cache bust
+                if (avatarPreview) avatarPreview.src = avatarUrl;
+                if (navAvatar) navAvatar.src = avatarUrl;
+            }
+
+            function applyUserToUI(user) {
+                if (!user) return;
+
+                const displayName = user.nickname?.trim() || user.username || '';
+                if (usernameEl) {
+                    usernameEl.textContent = displayName ? '@' + displayName : '';
+                    usernameEl.classList.remove('sr-only', 'hidden');
+                }
+
+                let avatarPath = user.avatar || '/uploads/default.png';
+                if (!/^https?:\/\//i.test(avatarPath)) avatarPath = new URL(avatarPath, API_BASE).href;
+                updateAvatar(avatarPath);
+
+                localStorage.setItem('me', JSON.stringify(user));
+            }
+
+            // ----------------------------
+            // Load current user
+            // ----------------------------
+            async function loadCurrentUser() {
+                try {
+                    // Optimistic render from cache
+                    const cached = localStorage.getItem('me');
+                    if (cached) applyUserToUI(JSON.parse(cached));
+                } catch (e) { /* ignore */ }
+
+                try {
+                    const token = localStorage.getItem('jwt');
+                    const headers = { Accept: 'application/json' };
+                    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+                    const resp = await fetch('/api/user/me', { method: 'GET', headers });
+                    if (!resp.ok) {
+                        localStorage.removeItem('me');
+                        applyUserToUI({ avatar: '/uploads/default.png', username: '' });
+                        return;
+                    }
+
+                    const { success, user } = await resp.json();
+                    if (success && user) applyUserToUI(user);
+                    else applyUserToUI({ avatar: '/uploads/default.png', username: '' });
+                } catch (err) {
+                    console.warn('Failed to load user:', err);
+                }
+            }
+
+            window.loadCurrentUser = loadCurrentUser;
+            loadCurrentUser();
+            window.addEventListener('auth:changed', loadCurrentUser);
+
+            // ----------------------------
+            // Display name update
+            // ----------------------------
+            displayForm?.addEventListener('submit', async e => {
                 e.preventDefault();
                 displayMsg.textContent = 'Updating…';
                 try {
                     const token = localStorage.getItem('jwt');
-                    const resp = await fetch('https://localhost:3000/api/user/displayname', { // change to your endpoint
+                    const newNickname = displayInput.value.trim();
+                    const resp = await fetch('/api/user/displayname', {
                         method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...(token ? { Authorization: 'Bearer ' + token } : {})
-                        },
-                        body: JSON.stringify({ nickname: displayInput.value.trim() })
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+                        body: JSON.stringify({ nickname: newNickname })
                     });
                     const json = await resp.json();
                     if (!resp.ok || !json.success) throw new Error(json.error || 'Update failed');
                     displayMsg.textContent = 'Display name updated';
-                    // refresh UI
-                    window.loadCurrentUser?.();
+                    // Update localStorage immediately with new nickname
+                    const me = JSON.parse(localStorage.getItem('me') || '{}');
+                    me.nickname = newNickname;
+                    localStorage.setItem('me', JSON.stringify(me));
+
+                    // Update header username
+                    const usernameEl = document.getElementById('nav-username');
+                    if (usernameEl) usernameEl.textContent = '@' + newNickname;
+
+                    // Update profile panel username
+                    const profileUsernameEl = document.getElementById('profile-username');
+                    if (profileUsernameEl) profileUsernameEl.textContent = newNickname;
                 } catch (err) {
                     displayMsg.textContent = 'Error: ' + (err.message || err);
                 }
             });
-            /* Avatar upload */
-            const avatarForm = document.getElementById('avatar-form');
-            const avatarFile = document.getElementById('avatar-file');
-            const avatarMsg = document.getElementById('avatar-message');
-            const profileAvatar = document.getElementById('profile-avatar');
 
-            avatarForm?.addEventListener('submit', async (e) => {
+            // ----------------------------
+            // Avatar upload
+            // ----------------------------
+            avatarForm?.addEventListener('submit', async e => {
                 e.preventDefault();
-                if (!avatarFile || !avatarFile.files || avatarFile.files.length === 0) {
+                if (!avatarFile?.files?.length) {
                     avatarMsg.textContent = 'Please choose an image file';
                     return;
                 }
@@ -838,117 +936,167 @@
                     fd.append('file', avatarFile.files[0]);
 
                     const token = localStorage.getItem('jwt');
-                    const resp = await fetch('https://localhost:3000/api/user/avatar', { // change to your avatar endpoint
+                    const resp = await fetch('/api/user/avatar', {
                         method: 'POST',
                         headers: token ? { Authorization: 'Bearer ' + token } : undefined,
                         body: fd
                     });
-
                     const json = await resp.json();
                     if (!resp.ok || !json.success) throw new Error(json.error || 'Upload failed');
+
                     avatarMsg.textContent = 'Uploaded';
-                    // update preview (use returned avatar path or reload from /api/user/me)
                     if (json.avatar) {
-                        profileAvatar.src = API_BASE + json.avatar + "?t=" + Date.now();
+                        updateAvatar(API_BASE + json.avatar);
+                        const me = JSON.parse(localStorage.getItem('me') || '{}');
+                        me.avatar = json.avatar;
+                        localStorage.setItem('me', JSON.stringify(me));
                     } else {
-                        // fallback: reload current user
-                        await window.loadCurrentUser?.();
+                        await loadCurrentUser();
                     }
                 } catch (err) {
                     avatarMsg.textContent = 'Error: ' + (err.message || err);
                 }
             });
+
+            // ----------------------------
+            // Login helper
+            // ----------------------------
+            window.login = async function (username, password) {
+                const resp = await fetch('/api/auth/signin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) throw new Error(data.error || 'Login failed');
+
+                localStorage.setItem('jwt', data.token);
+                localStorage.setItem('me', JSON.stringify(data.user || {}));
+
+                window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
+                await loadCurrentUser();
+                return data;
+            }
+        })();
+    </script>
+    <script>
+        async function loadProfile() {
+            const me = JSON.parse(localStorage.getItem("me") || "{}");
+            const token = localStorage.getItem("jwt");
+
+            if (!me.id || !token) {
+                console.warn("User not logged in");
+                return;
+            }
+            const res = await fetch(`/api/user/${me.id}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (!data.success) {
+                console.error("Profile load failed:", data.error);
+                return;
+            }
+            const user = data.user;
+            const displayName = user.nickname?.trim() || user.username || "";
+            document.getElementById("profile-username").textContent = displayName;
+            document.getElementById("profile-email").textContent = user.email;
+            document.getElementById("profile-elo").textContent = user.elo ?? "0";
+            document.getElementById("profile-matches").textContent = user.matches_played ?? "0";
+            document.getElementById("profile-winrate").textContent = (user.winrate ?? 0) + "%";
+            if (user.avatar) {
+                document.getElementById("profile-avatar").src = user.avatar;
+            }
+            localStorage.setItem("me", JSON.stringify(user));
+        }
+        // 🔥 Run when the user successfully logs in
+        window.addEventListener("auth:changed", (e) => {
+            if (e.detail.loggedIn) {
+                loadProfile();
+            }
+        });
+        // Optional: If already logged in on refresh
+        document.addEventListener("DOMContentLoaded", () => {
+            const token = localStorage.getItem("jwt");
+            const me = JSON.parse(localStorage.getItem("me") || "{}");
+            if (token && me.id) {
+                loadProfile();
+            }
         });
     </script>
-    <!-- Login function-->
     <script>
-        async function login(username, password) {
-            const resp = await fetch('/api/auth/signin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-            const data = await resp.json();
-            if (!resp.ok || !data.success) throw new Error(data.error || 'Login failed');
-            // store token + cached user
-            localStorage.setItem('jwt', data.token);
-            localStorage.setItem('me', JSON.stringify(data.user || {}));
-            // notify & refresh UI
-            window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
-            window.loadCurrentUser?.();
-            return data;
-        }
-    </script>
-    <!-- Load current user and show username to the right of avatar -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            (function () {
-                const avatarEl = document.getElementById('nav-avatar');
-                const usernameEl = document.getElementById('nav-username');
-                const profileLink = document.getElementById('user-profile-link');
-                if (!avatarEl || !usernameEl) return;
-                function applyUserToUI(user) {
-                    // display nickname if available, otherwise fallback to username
-                    const displayName = user?.nickname?.trim() ? user.nickname : user.username;
-                    const usernameText = displayName ? ('@' + displayName) : '';
-                    usernameEl.textContent = usernameText;
-                    // ensure visible (remove sr-only only when we actually want it visible)
-                    usernameEl.classList.remove('sr-only'); // accessible default hidden for small devices
-                    usernameEl.classList.remove('hidden');
-                    // avatar
-                    let avatarPath = user?.avatar || '/uploads/default.png';
-                    if (/^https?:\/\//i.test(avatarPath)) {
-                        avatarEl.src = avatarPath;
-                    } else {
-                        avatarEl.src = new URL(avatarPath, window.location.origin).href;
-                    }
-                    avatarEl.alt = (displayName || 'User') + ' avatar';
-                }
-                async function loadCurrentUser() {
-                    // optimistic render from cached "me"
-                    try {
-                        const cached = localStorage.getItem('me');
-                        if (cached) {
-                            try { applyUserToUI(JSON.parse(cached)); } catch (e) { /* ignore parse errors */ }
-                        }
-                    } catch (e) { /* ignore */ }
-                    try {
-                        const token = localStorage.getItem('jwt');
-                        const headers = { 'Accept': 'application/json' };
-                        if (token) headers['Authorization'] = 'Bearer ' + token;
+        async function loadFriends() {
+            const me = JSON.parse(localStorage.getItem("me") || "{}");
+            if (!me.id) return;
 
-                        const resp = await fetch('/api/user/me', { method: 'GET', headers });
-                        if (!resp.ok) {
-                            // unauthenticated -> reset to defaults
-                            usernameEl.textContent = '';
-                            usernameEl.classList.add('sr-only');
-                            avatarEl.src = new URL('/uploads/default.png', window.location.origin).href;
-                            avatarEl.alt = 'User avatar';
-                            localStorage.removeItem('me'); // clear cached user
-                            return;
-                        }
-                        const payload = await resp.json();
-                        const { success, user } = payload || {};
-                        if (!success || !user) {
-                            usernameEl.textContent = '';
-                            avatarEl.src = new URL('/uploads/default.png', window.location.origin).href;
-                            return;
-                        }
-                        // store latest user and apply UI
-                        localStorage.setItem('me', JSON.stringify(user));
-                        applyUserToUI(user);
-                    } catch (err) {
-                        console.warn('Failed to load user:', err);
-                        // keep cached UI if any, otherwise show defaults
-                    }
-                }
-                // expose
-                window.loadCurrentUser = loadCurrentUser;
-                // run at startup
-                loadCurrentUser();
-                // re-run after auth changes (login/logout)
-                window.addEventListener('auth:changed', loadCurrentUser);
-            })();
+            const { friends } = await getFriends(me.id);
+            const { requests } = await getIncomingRequests(me.id);
+
+            // --- FRIEND LIST ---
+            const listEl = document.getElementById("friends-list");
+            listEl.innerHTML = "";
+            friends.forEach(f => {
+                const div = document.createElement("div");
+                div.className = "p-2 border rounded mb-2 flex justify-between";
+                div.innerHTML = `
+                        <span>${f.username}</span>
+                        <span class="${f.online ? "text-green-500" : "text-gray-500"}">
+                            ${f.online ? "● online" : "○ offline"}
+                        </span>
+                    `;
+                listEl.appendChild(div);
+            });
+
+            // --- INCOMING REQUESTS ---
+            const incoming = document.getElementById("friends-incoming");
+            incoming.innerHTML = "";
+            requests.forEach(r => {
+                const div = document.createElement("div");
+                div.className = "p-2 border rounded mb-2 flex justify-between";
+                div.innerHTML = `
+                        <span>${r.username}</span>
+                        <button class="bg-green-600 text-white px-2 rounded"
+                            onclick="acceptFriendRequest(${me.id}, ${r.id})">
+                            Accept
+                        </button>
+                    `;
+                incoming.appendChild(div);
+            });
+        }
+
+        // Accept Friend
+        async function acceptFriendRequest(userId, friendId) {
+            await acceptFriend(userId, friendId);
+            loadFriends();
+        }
+
+        document.addEventListener("DOMContentLoaded", loadFriends);
+    </script>
+    <script>
+        document.getElementById("friend-send-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const username = (document.getElementById("friend-username-input") as HTMLInputElement).value.trim();
+            const messageEl = document.getElementById("friend-send-message");
+            if (!username) return;
+
+            try {
+                const me = JSON.parse(localStorage.getItem("me") || "{}");
+                const token = localStorage.getItem("jwt");
+                const res = await fetch("/api/user/friend-by-username", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ username })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || "Failed");
+
+                messageEl.textContent = `Friend request sent to ${username}`;
+                loadFriends(); // Refresh friends list
+            } catch (err: any) {
+                messageEl.textContent = err.message;
+            }
         });
     </script>
     <!-- Scripts at the end for Vite-friendly imports -->
