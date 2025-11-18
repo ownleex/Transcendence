@@ -267,7 +267,7 @@
                 <div class="flex items-center gap-6">
                     <img id="profile-avatar" src="https://i.pravatar.cc/80" class="w-20 h-20 rounded-full border" />
                     <div>
-                        <div id="profile-username" class="text-xl font-semibold">—</div>
+                        <div id="profile-username" class="text-xl text-gray-600 font-semibold">—</div>
                         <div id="profile-email" class="text-sm text-gray-500">—</div>
                         <div class="mt-2 text-sm text-gray-600">ELO: <span id="profile-elo">—</span> • Matches: <span id="profile-matches">—</span> • Winrate: <span id="profile-winrate">—</span></div>
                     </div>
@@ -277,7 +277,7 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h4 class="font-semibold mb-2">Change display name</h4>
+                        <h4 class="font-semibold mb-2 text-orange-500">Change display name</h4>
                         <form id="displayname-form" class="flex gap-2">
                             <input id="displayname-input" type="text" class="border p-2 rounded w-full" placeholder="Nickname / display name" />
                             <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Update</button>
@@ -286,7 +286,7 @@
                     </div>
 
                     <div>
-                        <h4 class="font-semibold mb-2">Upload avatar</h4>
+                        <h4 class="font-semibold mb-2 text-orange-500">Upload avatar</h4>
                         <form id="avatar-form" class="flex flex-col gap-2">
                             <input id="avatar-file" type="file" accept="image/*" />
                             <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded w-32 cursor-pointer">Upload</button>
@@ -304,16 +304,16 @@
         <!-- FRIENDS PANEL -->
         <section id="friends-panel" class="hidden w-full max-w-4xl mt-8">
             <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                <h3 class="text-lg font-semibold mb-3">Friends</h3>
+                <h3 class="text-lg font-semibold mb-3 text-orange-500">Friends</h3>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h4 class="font-medium">Your friends</h4>
+                        <h4 class="font-medium text-orange-500">Your friends</h4>
                         <div id="friends-list" class="mt-3"></div>
                     </div>
 
                     <div>
-                        <h4 class="font-medium">Add a friend</h4>
+                        <h4 class="font-medium text-orange-500">Add a friend</h4>
                         <form id="friend-send-form" class="flex gap-2 mt-3">
                             <input id="friend-username-input" class="border p-2 rounded w-full" placeholder="Friend username" />
                             <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Send</button>
@@ -321,11 +321,11 @@
                         <p id="friend-send-message" class="mt-2 text-sm text-gray-600"></p>
 
                         <div class="mt-6">
-                            <h5 class="font-medium">Incoming requests</h5>
+                            <h5 class="font-medium text-orange-500">Incoming requests</h5>
                             <div id="friends-incoming" class="mt-2 text-sm text-gray-500"></div>
                         </div>
                         <div class="mt-6">
-                            <h5 class="font-medium">Sent requests</h5>
+                            <h5 class="font-medium text-orange-500">Sent requests</h5>
                             <div id="friends-sent" class="mt-2 text-sm text-gray-500"></div>
                         </div>
                     </div>
@@ -340,11 +340,11 @@
         <!-- MATCH HISTORY PANEL -->
         <section id="matches-panel" class="hidden w-full max-w-4xl mt-8">
             <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                <h3 class="text-lg font-semibold mb-3">Match history</h3>
+                <h3 class="text-lg font-semibold mb-3 text-orange-500">Match history</h3>
                 <div id="matches-list"></div>
 
                 <div class="mt-4">
-                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-gray-200 rounded cursor-pointer">Back</button>
+                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
                 </div>
             </div>
         </section>
@@ -1026,129 +1026,7 @@
                 loadProfile();
             }
         });
-    </script>
-    <script>
-        async function loadFriends() {
-            const me = JSON.parse(localStorage.getItem("me") || "{}");
-            if (!me.id) return;
-
-            const { friends } = await getFriends(me.id);
-            const { requests } = await getIncomingRequests(me.id);
-
-            // --- FRIEND LIST ---
-            const listEl = document.getElementById("friends-list");
-            listEl.innerHTML = "";
-            friends.forEach(f => {
-                const div = document.createElement("div");
-                div.className = "p-2 border rounded mb-2 flex justify-between";
-                div.innerHTML = `
-                        <span>${f.username}</span>
-                        <span class="${f.online ? "text-green-500" : "text-gray-500"}">
-                            ${f.online ? "● online" : "○ offline"}
-                        </span>
-                    `;
-                listEl.appendChild(div);
-            });
-
-            // --- INCOMING REQUESTS ---
-            const incoming = document.getElementById("friends-incoming");
-            incoming.innerHTML = "";
-            requests.forEach(r => {
-                const div = document.createElement("div");
-                div.className = "p-2 border rounded mb-2 flex justify-between";
-                div.innerHTML = `
-                        <span>${r.username}</span>
-                        <button class="bg-green-600 text-white px-2 rounded"
-                            onclick="acceptFriendRequest(${me.id}, ${r.id})">
-                            Accept
-                        </button>
-                    `;
-                incoming.appendChild(div);
-            });
-        }
-        // Sent request
-        const { sent } = await getSentRequests(me.id);
-        const sentEl = document.getElementById("friends-sent");
-        sentEl.innerHTML = "";
-        sent.forEach(r => {
-            const div = document.createElement("div");
-            div.className = "p-2 border rounded mb-2 flex justify-between";
-            div.innerHTML = `<span>${r.username}</span><span class="text-yellow-500">Pending</span>`;
-            sentEl.appendChild(div);
-        });
-
-        // Accept Friend
-        async function acceptFriendRequest(userId, friendId) {
-            await acceptFriend(userId, friendId);
-            loadFriends();
-        }
-
-        document.addEventListener("DOMContentLoaded", loadFriends);
-    </script>
-    <script>
-        document.getElementById("friend-send-form").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const username = (document.getElementById("friend-username-input") as HTMLInputElement).value.trim();
-            const messageEl = document.getElementById("friend-send-message");
-            if (!username) return;
-
-            try {
-                const me = JSON.parse(localStorage.getItem("me") || "{}");
-                const token = localStorage.getItem("jwt");
-                const res = await fetch("/api/user/friend-by-username", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ username })
-                });
-                const data = await res.json();
-                if (!data.success) throw new Error(data.error || "Failed");
-
-                // Show message
-                messageEl.textContent = `Friend request sent to ${username}`;
-
-                // Refresh friends panel, including pending requests
-                const { friends } = await getFriends(me.id);
-                const { requests } = await getIncomingRequests(me.id);
-
-                const listEl = document.getElementById("friends-list");
-                const incoming = document.getElementById("friends-incoming");
-
-                // Clear and update friends list
-                listEl.innerHTML = "";
-                friends.forEach(f => {
-                    const div = document.createElement("div");
-                    div.className = "p-2 border rounded mb-2 flex justify-between";
-                    div.innerHTML = `
-                        <span>${f.username}</span>
-                        <span class="${f.online ? "text-green-500" : "text-gray-500"}">
-                            ${f.online ? "● online" : "○ offline"}
-                        </span>
-                    `;
-                    listEl.appendChild(div);
-                });
-
-                // Clear and update incoming requests
-                incoming.innerHTML = "";
-                requests.forEach(r => {
-                    const div = document.createElement("div");
-                    div.className = "p-2 border rounded mb-2 flex justify-between";
-                    div.innerHTML = `
-                        <span>${r.username}</span>
-                        <button class="bg-green-600 text-white px-2 rounded"
-                            onclick="acceptFriendRequest(${me.id}, ${r.id})">
-                            Accept
-                        </button>
-                    `;
-                    incoming.appendChild(div);
-                });
-            } catch (err: any) {
-                messageEl.textContent = err.message;
-            }
-        });
-    </script>
+    </script>    
     <!-- Scripts at the end for Vite-friendly imports -->
     <script type="module" src="./src/alias.ts"></script>
     <script type="module" src="./src/main.ts"></script>
