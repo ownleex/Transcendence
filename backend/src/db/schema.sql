@@ -83,12 +83,13 @@ CREATE TABLE Tournament (
 );
 
 CREATE TABLE Player (
+    player_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     tournament_id INTEGER NOT NULL,
     nickname TEXT,
     elo INTEGER DEFAULT 1000,
     rank INTEGER,
-    PRIMARY KEY (user_id, tournament_id),
+    UNIQUE (user_id, tournament_id),
     FOREIGN KEY (user_id) REFERENCES User(id) ON DELETE CASCADE,
     FOREIGN KEY (tournament_id) REFERENCES Tournament(tournament_id) ON DELETE CASCADE
 );
@@ -99,9 +100,9 @@ CREATE TABLE Match (
     player2 INTEGER NOT NULL,
     winner INTEGER,
     tournament_id INTEGER NOT NULL,
-    FOREIGN KEY (player1) REFERENCES Player(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (player2) REFERENCES Player(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (winner) REFERENCES Player(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (player1) REFERENCES Player(player_id) ON DELETE CASCADE,
+    FOREIGN KEY (player2) REFERENCES Player(player_id) ON DELETE CASCADE,
+    FOREIGN KEY (winner) REFERENCES Player(player_id) ON DELETE SET NULL,
     FOREIGN KEY (tournament_id) REFERENCES Tournament(tournament_id) ON DELETE CASCADE
 );
 

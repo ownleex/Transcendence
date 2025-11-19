@@ -1,105 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Transcendence 42</title>
-  <script src="https://cdn.tailwindcss.com"></script>
- <style>
-    .hidden-section { display: none; }
-     section {
-         position: relative;
-         z-index: 10;
-     }
-     button {
-         cursor: pointer;
-     }
-  </style>
-  <script>
-    (function migrateTokenKey(){
-    try {
-        const t = localStorage.getItem('token');
-        if (t && !localStorage.getItem('jwt')) {
-        localStorage.setItem('jwt', t);
-        console.info('[auth] migrated localStorage.token -> localStorage.jwt');
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transcendence 42</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        section {
+            position: relative;
+            z-index: 10;
         }
-    } catch (e) { console.warn('token migration error', e); }
-    })();
-</script>
- <script>
-    (function(){
-    try {
-        const url = new URL(window.location.href);
-        const t = url.searchParams.get('token');
-        if (!t) return;
-        if (window.location.pathname === '/reset-password') return;
-        localStorage.setItem('jwt', t);
-        url.searchParams.delete('token');
-        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-
-        (async ()=>{
-        try {
-            const r = await fetch('/api/user/me', { headers: { 'Authorization': 'Bearer ' + t }});
-            if (r.ok) {
-            const payload = await r.json();
-            if (payload?.success && payload.user) {
-                localStorage.setItem('me', JSON.stringify(payload.user));
-                window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true }}));
-            }
-            }
-        } catch(e){ console.warn(e); }
+        button {
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        (function migrateTokenKey() {
+            try {
+                const t = localStorage.getItem('token');
+                if (t && !localStorage.getItem('jwt')) {
+                    localStorage.setItem('jwt', t);
+                    console.info('[auth] migrated localStorage.token -> localStorage.jwt');
+                }
+            } catch (e) { console.warn('token migration error', e); }
         })();
-    } catch(e){ console.warn(e); }
-    })();
-</script>
- <script>
-  // Tiny API helper used across the page
-    const API_BASE = "https://localhost:3000/api";
-    async function apiRequest(endpoint, opts = {}) {
-    const token = localStorage.getItem('jwt');
-    const headers = opts.body instanceof FormData ? {} : { "Content-Type": "application/json" };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...opts, headers });
-    const text = await res.text();
-    let data;
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if (!res.ok) throw data;
-    return data;
-    }
-  </script>
-  <script>
-  // OAuth intercept: clear client state before redirect and add prompt params
-  document.querySelectorAll('a[data-oauth]').forEach(a => {
-  a.addEventListener('click', (e) => {
-    e.preventDefault();
-    console.log('[auth debug] starting OAuth redirect to', a.href);
-    // Clear client tokens so UI won't think user is still logged in
-    localStorage.removeItem('token');
-    localStorage.removeItem('jwt');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('jwt');
-    debugState('cleared tokens before oauth redirect');
-    // Build redirect URL
-    const href = new URL(a.href, window.location.origin);
-    // 🟢 GitHub
-    if (/github/i.test(href.href)) {
-      href.searchParams.set('prompt', 'consent');
-      href.searchParams.set('allow_signup', 'false');
-    }
-    // 🟢 42 Intra (our /api/auth/signin path or containing "intra.42.fr")
-    else if (/auth\/signin/i.test(href.pathname) || /intra\.42\.fr/i.test(href.href)) {
-      href.searchParams.set('prompt', 'login');
-      href.searchParams.set('access_type', 'offline'); // harmless, standard param
-    }
-    // fallback for others
-    else {
-      href.searchParams.set('prompt', 'login');
-    }
-    // Navigate
-    window.location.href = href.toString();
-  });
-});
-</script>
+    </script>
+    <script>
+        (function () {
+            try {
+                const url = new URL(window.location.href);
+                const t = url.searchParams.get('token');
+                if (!t) return;
+                if (window.location.pathname === '/reset-password') return;
+                localStorage.setItem('jwt', t);
+                url.searchParams.delete('token');
+                window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+
+                (async () => {
+                    try {
+                        const r = await fetch('/api/user/me', { headers: { 'Authorization': 'Bearer ' + t } });
+                        if (r.ok) {
+                            const payload = await r.json();
+                            if (payload?.success && payload.user) {
+                                localStorage.setItem('me', JSON.stringify(payload.user));
+                                window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
+                            }
+                        }
+                    } catch (e) { console.warn(e); }
+                })();
+            } catch (e) { console.warn(e); }
+        })();
+    </script>
+    <script>
+        // Tiny API helper used across the page
+        const API_BASE = "https://localhost:3000/api";
+        async function apiRequest(endpoint, opts = {}) {
+            const token = localStorage.getItem('jwt');
+            const headers = opts.body instanceof FormData ? {} : { "Content-Type": "application/json" };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(`${API_BASE}${endpoint}`, { ...opts, headers });
+            const text = await res.text();
+            let data;
+            try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+            if (!res.ok) throw data;
+            return data;
+        }
+    </script>
+    <script>
+        // OAuth intercept: clear client state before redirect and add prompt params
+        document.querySelectorAll('a[data-oauth]').forEach(a => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('[auth debug] starting OAuth redirect to', a.href);
+                // Clear client tokens so UI won't think user is still logged in
+                localStorage.removeItem('token');
+                localStorage.removeItem('jwt');
+                sessionStorage.removeItem('token');
+                sessionStorage.removeItem('jwt');
+                debugState('cleared tokens before oauth redirect');
+                // Build redirect URL
+                const href = new URL(a.href, window.location.origin);
+                // 🟢 GitHub
+                if (/github/i.test(href.href)) {
+                    href.searchParams.set('prompt', 'consent');
+                    href.searchParams.set('allow_signup', 'false');
+                }
+                // 🟢 42 Intra (our /api/auth/signin path or containing "intra.42.fr")
+                else if (/auth\/signin/i.test(href.pathname) || /intra\.42\.fr/i.test(href.href)) {
+                    href.searchParams.set('prompt', 'login');
+                    href.searchParams.set('access_type', 'offline'); // harmless, standard param
+                }
+                // fallback for others
+                else {
+                    href.searchParams.set('prompt', 'login');
+                }
+                // Navigate
+                window.location.href = href.toString();
+            });
+        });
+    </script>
 </head>
 <body class="bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 flex flex-col justify-center items-center min-h-screen transition-all duration-500 relative">
     <!-- HEADER SECTION -->
@@ -267,7 +266,7 @@
                 <div class="flex items-center gap-6">
                     <img id="profile-avatar" src="https://i.pravatar.cc/80" class="w-20 h-20 rounded-full border" />
                     <div>
-                        <div id="profile-username" class="text-xl font-semibold">—</div>
+                        <div id="profile-username" class="text-xl text-gray-600 font-semibold">—</div>
                         <div id="profile-email" class="text-sm text-gray-500">—</div>
                         <div class="mt-2 text-sm text-gray-600">ELO: <span id="profile-elo">—</span> • Matches: <span id="profile-matches">—</span> • Winrate: <span id="profile-winrate">—</span></div>
                     </div>
@@ -277,7 +276,7 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h4 class="font-semibold mb-2">Change display name</h4>
+                        <h4 class="font-semibold mb-2 text-orange-500">Change display name</h4>
                         <form id="displayname-form" class="flex gap-2">
                             <input id="displayname-input" type="text" class="border p-2 rounded w-full" placeholder="Nickname / display name" />
                             <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Update</button>
@@ -286,7 +285,7 @@
                     </div>
 
                     <div>
-                        <h4 class="font-semibold mb-2">Upload avatar</h4>
+                        <h4 class="font-semibold mb-2 text-orange-500">Upload avatar</h4>
                         <form id="avatar-form" class="flex flex-col gap-2">
                             <input id="avatar-file" type="file" accept="image/*" />
                             <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded w-32 cursor-pointer">Upload</button>
@@ -304,16 +303,16 @@
         <!-- FRIENDS PANEL -->
         <section id="friends-panel" class="hidden w-full max-w-4xl mt-8">
             <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                <h3 class="text-lg font-semibold mb-3">Friends</h3>
+                <h3 class="text-lg font-semibold mb-3 text-orange-500">Friends</h3>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h4 class="font-medium">Your friends</h4>
+                        <h4 class="font-medium text-orange-500">Your friends</h4>
                         <div id="friends-list" class="mt-3"></div>
                     </div>
 
                     <div>
-                        <h4 class="font-medium">Add a friend</h4>
+                        <h4 class="font-medium text-orange-500">Add a friend</h4>
                         <form id="friend-send-form" class="flex gap-2 mt-3">
                             <input id="friend-username-input" class="border p-2 rounded w-full" placeholder="Friend username" />
                             <button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">Send</button>
@@ -321,8 +320,12 @@
                         <p id="friend-send-message" class="mt-2 text-sm text-gray-600"></p>
 
                         <div class="mt-6">
-                            <h5 class="font-medium">Incoming requests</h5>
-                            <div id="friends-incoming" class="mt-2 text-sm text-gray-500">Server may not expose incoming requests via the simple friends list.</div>
+                            <h5 class="font-medium text-orange-500">Incoming requests</h5>
+                            <div id="friends-incoming" class="mt-2 text-sm text-gray-500"></div>
+                        </div>
+                        <div class="mt-6">
+                            <h5 class="font-medium text-orange-500">Sent requests</h5>
+                            <div id="friends-sent" class="mt-2 text-sm text-gray-500"></div>
                         </div>
                     </div>
                 </div>
@@ -336,11 +339,11 @@
         <!-- MATCH HISTORY PANEL -->
         <section id="matches-panel" class="hidden w-full max-w-4xl mt-8">
             <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
-                <h3 class="text-lg font-semibold mb-3">Match history</h3>
+                <h3 class="text-lg font-semibold mb-3 text-orange-500">Match history</h3>
                 <div id="matches-list"></div>
 
                 <div class="mt-4">
-                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-gray-200 rounded cursor-pointer">Back</button>
+                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
                 </div>
             </div>
         </section>
@@ -1020,82 +1023,6 @@
             const me = JSON.parse(localStorage.getItem("me") || "{}");
             if (token && me.id) {
                 loadProfile();
-            }
-        });
-    </script>
-    <script>
-        async function loadFriends() {
-            const me = JSON.parse(localStorage.getItem("me") || "{}");
-            if (!me.id) return;
-
-            const { friends } = await getFriends(me.id);
-            const { requests } = await getIncomingRequests(me.id);
-
-            // --- FRIEND LIST ---
-            const listEl = document.getElementById("friends-list");
-            listEl.innerHTML = "";
-            friends.forEach(f => {
-                const div = document.createElement("div");
-                div.className = "p-2 border rounded mb-2 flex justify-between";
-                div.innerHTML = `
-                        <span>${f.username}</span>
-                        <span class="${f.online ? "text-green-500" : "text-gray-500"}">
-                            ${f.online ? "● online" : "○ offline"}
-                        </span>
-                    `;
-                listEl.appendChild(div);
-            });
-
-            // --- INCOMING REQUESTS ---
-            const incoming = document.getElementById("friends-incoming");
-            incoming.innerHTML = "";
-            requests.forEach(r => {
-                const div = document.createElement("div");
-                div.className = "p-2 border rounded mb-2 flex justify-between";
-                div.innerHTML = `
-                        <span>${r.username}</span>
-                        <button class="bg-green-600 text-white px-2 rounded"
-                            onclick="acceptFriendRequest(${me.id}, ${r.id})">
-                            Accept
-                        </button>
-                    `;
-                incoming.appendChild(div);
-            });
-        }
-
-        // Accept Friend
-        async function acceptFriendRequest(userId, friendId) {
-            await acceptFriend(userId, friendId);
-            loadFriends();
-        }
-
-        document.addEventListener("DOMContentLoaded", loadFriends);
-    </script>
-    <script>
-        document.getElementById("friend-send-form").addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const username = (document.getElementById("friend-username-input") as HTMLInputElement).value.trim();
-            const messageEl = document.getElementById("friend-send-message");
-            if (!username) return;
-
-            try {
-                const me = JSON.parse(localStorage.getItem("me") || "{}");
-                const token = localStorage.getItem("jwt");
-                const res = await fetch("/api/user/friend-by-username", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ username })
-                });
-                const data = await res.json();
-                if (!data.success) throw new Error(data.error || "Failed");
-
-                messageEl.textContent = `Friend request sent to ${username}`;
-                loadFriends(); // Refresh friends list
-            } catch (err: any) {
-                messageEl.textContent = err.message;
             }
         });
     </script>

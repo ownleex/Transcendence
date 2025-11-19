@@ -35,8 +35,13 @@ export const verify2FA = (userId: number, token: string) =>
   });
 
 // --- FRIENDS ---
-export const sendFriendRequest = (userId: number, friendId: number) =>
-  request("/friend", { method: "POST", body: JSON.stringify({ userId, friendId }) });
+//export const sendFriendRequest = (userId: number, friendId: number) =>
+//request("/user/friend-by-username", { method: "POST", body: JSON.stringify({ userId, friendId }) });
+export const sendFriendRequest = (username: string) =>
+  request("/user/friend-by-username", {
+    method: "POST",
+    body: JSON.stringify({ username })
+  });
 
 export const acceptFriend = (userId: number, friendId: number) =>
   request("/friend/accept", { method: "PUT", body: JSON.stringify({ userId, friendId }) });
@@ -46,6 +51,10 @@ export const getFriends = (userId: number) =>
 
 export const getIncomingRequests = (userId: number) =>
     request(`/user/${userId}/friend-requests`);
+
+export const getSentRequests = (userId: number) =>
+    request(`/user/${userId}/sent-requests`);
+
 
 // --- STATS ---
 export const getUserProfile = (userId: number) =>
