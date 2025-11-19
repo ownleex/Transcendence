@@ -1,105 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Transcendence 42</title>
-  <script src="https://cdn.tailwindcss.com"></script>
- <style>
-    .hidden-section { display: none; }
-     section {
-         position: relative;
-         z-index: 10;
-     }
-     button {
-         cursor: pointer;
-     }
-  </style>
-  <script>
-    (function migrateTokenKey(){
-    try {
-        const t = localStorage.getItem('token');
-        if (t && !localStorage.getItem('jwt')) {
-        localStorage.setItem('jwt', t);
-        console.info('[auth] migrated localStorage.token -> localStorage.jwt');
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Transcendence 42</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        section {
+            position: relative;
+            z-index: 10;
         }
-    } catch (e) { console.warn('token migration error', e); }
-    })();
-</script>
- <script>
-    (function(){
-    try {
-        const url = new URL(window.location.href);
-        const t = url.searchParams.get('token');
-        if (!t) return;
-        if (window.location.pathname === '/reset-password') return;
-        localStorage.setItem('jwt', t);
-        url.searchParams.delete('token');
-        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-
-        (async ()=>{
-        try {
-            const r = await fetch('/api/user/me', { headers: { 'Authorization': 'Bearer ' + t }});
-            if (r.ok) {
-            const payload = await r.json();
-            if (payload?.success && payload.user) {
-                localStorage.setItem('me', JSON.stringify(payload.user));
-                window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true }}));
-            }
-            }
-        } catch(e){ console.warn(e); }
+        button {
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        (function migrateTokenKey() {
+            try {
+                const t = localStorage.getItem('token');
+                if (t && !localStorage.getItem('jwt')) {
+                    localStorage.setItem('jwt', t);
+                    console.info('[auth] migrated localStorage.token -> localStorage.jwt');
+                }
+            } catch (e) { console.warn('token migration error', e); }
         })();
-    } catch(e){ console.warn(e); }
-    })();
-</script>
- <script>
-  // Tiny API helper used across the page
-    const API_BASE = "https://localhost:3000/api";
-    async function apiRequest(endpoint, opts = {}) {
-    const token = localStorage.getItem('jwt');
-    const headers = opts.body instanceof FormData ? {} : { "Content-Type": "application/json" };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${API_BASE}${endpoint}`, { ...opts, headers });
-    const text = await res.text();
-    let data;
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if (!res.ok) throw data;
-    return data;
-    }
-  </script>
-  <script>
-  // OAuth intercept: clear client state before redirect and add prompt params
-  document.querySelectorAll('a[data-oauth]').forEach(a => {
-  a.addEventListener('click', (e) => {
-    e.preventDefault();
-    console.log('[auth debug] starting OAuth redirect to', a.href);
-    // Clear client tokens so UI won't think user is still logged in
-    localStorage.removeItem('token');
-    localStorage.removeItem('jwt');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('jwt');
-    debugState('cleared tokens before oauth redirect');
-    // Build redirect URL
-    const href = new URL(a.href, window.location.origin);
-    // 🟢 GitHub
-    if (/github/i.test(href.href)) {
-      href.searchParams.set('prompt', 'consent');
-      href.searchParams.set('allow_signup', 'false');
-    }
-    // 🟢 42 Intra (our /api/auth/signin path or containing "intra.42.fr")
-    else if (/auth\/signin/i.test(href.pathname) || /intra\.42\.fr/i.test(href.href)) {
-      href.searchParams.set('prompt', 'login');
-      href.searchParams.set('access_type', 'offline'); // harmless, standard param
-    }
-    // fallback for others
-    else {
-      href.searchParams.set('prompt', 'login');
-    }
-    // Navigate
-    window.location.href = href.toString();
-  });
-});
-</script>
+    </script>
+    <script>
+        (function () {
+            try {
+                const url = new URL(window.location.href);
+                const t = url.searchParams.get('token');
+                if (!t) return;
+                if (window.location.pathname === '/reset-password') return;
+                localStorage.setItem('jwt', t);
+                url.searchParams.delete('token');
+                window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+
+                (async () => {
+                    try {
+                        const r = await fetch('/api/user/me', { headers: { 'Authorization': 'Bearer ' + t } });
+                        if (r.ok) {
+                            const payload = await r.json();
+                            if (payload?.success && payload.user) {
+                                localStorage.setItem('me', JSON.stringify(payload.user));
+                                window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
+                            }
+                        }
+                    } catch (e) { console.warn(e); }
+                })();
+            } catch (e) { console.warn(e); }
+        })();
+    </script>
+    <script>
+        // Tiny API helper used across the page
+        const API_BASE = "https://localhost:3000/api";
+        async function apiRequest(endpoint, opts = {}) {
+            const token = localStorage.getItem('jwt');
+            const headers = opts.body instanceof FormData ? {} : { "Content-Type": "application/json" };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(`${API_BASE}${endpoint}`, { ...opts, headers });
+            const text = await res.text();
+            let data;
+            try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+            if (!res.ok) throw data;
+            return data;
+        }
+    </script>
+    <script>
+        // OAuth intercept: clear client state before redirect and add prompt params
+        document.querySelectorAll('a[data-oauth]').forEach(a => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('[auth debug] starting OAuth redirect to', a.href);
+                // Clear client tokens so UI won't think user is still logged in
+                localStorage.removeItem('token');
+                localStorage.removeItem('jwt');
+                sessionStorage.removeItem('token');
+                sessionStorage.removeItem('jwt');
+                debugState('cleared tokens before oauth redirect');
+                // Build redirect URL
+                const href = new URL(a.href, window.location.origin);
+                // 🟢 GitHub
+                if (/github/i.test(href.href)) {
+                    href.searchParams.set('prompt', 'consent');
+                    href.searchParams.set('allow_signup', 'false');
+                }
+                // 🟢 42 Intra (our /api/auth/signin path or containing "intra.42.fr")
+                else if (/auth\/signin/i.test(href.pathname) || /intra\.42\.fr/i.test(href.href)) {
+                    href.searchParams.set('prompt', 'login');
+                    href.searchParams.set('access_type', 'offline'); // harmless, standard param
+                }
+                // fallback for others
+                else {
+                    href.searchParams.set('prompt', 'login');
+                }
+                // Navigate
+                window.location.href = href.toString();
+            });
+        });
+    </script>
 </head>
 <body class="bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-gray-800 flex flex-col justify-center items-center min-h-screen transition-all duration-500 relative">
     <!-- HEADER SECTION -->
@@ -1026,7 +1025,7 @@
                 loadProfile();
             }
         });
-    </script>    
+    </script>
     <!-- Scripts at the end for Vite-friendly imports -->
     <script type="module" src="./src/alias.ts"></script>
     <script type="module" src="./src/main.ts"></script>

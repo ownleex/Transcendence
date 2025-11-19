@@ -27,6 +27,8 @@ clean:
 	@echo "$(YELLOW)🛑 Stopping containers...$(NC)"
 	@docker compose down
 	@echo "$(GREEN)✓ Containers stopped!$(NC)"
+	@sudo rm -rf ./backend/data
+	@echo "$(GREEN)✓ Data directory removed!$(NC)"
 
 fclean: clean
 	@echo "$(RED)🧹 Cleaning Docker system...$(NC)"
