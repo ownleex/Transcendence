@@ -19,6 +19,8 @@ import notificationRoutes from "./routes/notification";
 import { setupWebSocket } from "./ws/game";
 import authRoutes from "./routes/auth";
 //import socketPlugin from "./routes/socket";
+import { setupSocket, onlineUsers } from "./routes/socket";
+
 // -------------------------
 // Load environment variables
 // -------------------------
@@ -70,7 +72,8 @@ fastify.decorate(
     }
   }
 );
-
+fastify.decorate("onlineUsers", onlineUsers);
+setupSocket(fastify);
 // -------------------------
 // API Routes
 // -------------------------

@@ -8,7 +8,7 @@ const app = document.getElementById("pongContent")!;
 function router() {
     const hash = window.location.hash;
 
-    app.innerHTML = ""; // always clear before loading a new view
+    app.innerHTML = ""; 
 
     if (!hash || hash === "#home") {
         showHome(app);
@@ -99,7 +99,6 @@ async function loadIncomingRequests() {
                 Accept
             </button>
         `;
-
         container.appendChild(div);
     });
 
@@ -109,7 +108,7 @@ async function loadIncomingRequests() {
             const friendId = btn.getAttribute("data-id");
             if (!friendId) return;
 
-            const result = await acceptFriend(currentUserId, Number(friendId));
+            const result = await acceptFriend(Number(friendId));
             if (result.success) loadAllFriendsData();
         });
     });

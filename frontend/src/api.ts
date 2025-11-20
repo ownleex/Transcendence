@@ -43,8 +43,8 @@ export const sendFriendRequest = (username: string) =>
     body: JSON.stringify({ username })
   });
 
-export const acceptFriend = (userId: number, friendId: number) =>
-  request("/friend/accept", { method: "PUT", body: JSON.stringify({ userId, friendId }) });
+export const acceptFriend = (requesterId: number) =>
+  request("/user/friend/accept", { method: "PUT", body: JSON.stringify({ userId: requesterId}) });
 
 export const getFriends = (userId: number) =>
     request(`/user/${userId}/friends`);

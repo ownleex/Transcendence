@@ -14,3 +14,9 @@ declare module 'fastify' {
     user?: import('./user').User;
   }
 }
+
+declare module "fastify" {
+  interface FastifyInstance {
+    onlineUsers: Set<number>;
+  }
+}
