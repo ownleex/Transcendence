@@ -98,6 +98,8 @@ CREATE TABLE Match (
     match_id INTEGER PRIMARY KEY AUTOINCREMENT,
     player1 INTEGER NOT NULL,
     player2 INTEGER NOT NULL,
+    player3 INTEGER,
+    player4 INTEGER,
     winner INTEGER,
     tournament_id INTEGER NOT NULL,
     FOREIGN KEY (player1) REFERENCES Player(player_id) ON DELETE CASCADE,
