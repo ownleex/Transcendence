@@ -1,3 +1,4 @@
+/*
 import { GameState } from "./types";
 
 export function showGame(container: HTMLElement) {
@@ -23,3 +24,190 @@ export function showGame(container: HTMLElement) {
 
   draw();
 }
+*/
+// main.ts
+import { GameState } from "./types";
+
+export function showGame(container: HTMLElement) {
+  'use strict';
+  // ----- Canvas -----
+  const canvas = document.createElement('canvas');
+  container.appendChild(canvas);
+  const ctx = canvas.getContext('2d')!;
+
+  // Apply the CSS from <style>
+  canvas.style.display = 'block';
+  canvas.style.background = '#fff';
+  container.style.margin = '0';
+  container.style.padding = '0';
+  container.style.width = '100vw';
+  container.style.height = '100vh';
+
+  // ----- HiDPI -----
+  let width = 0, height = 0, ratio = window.devicePixelRatio || 1;
+
+  function resize() {
+    width  = container.clientWidth;
+    height = container.clientHeight;
+    ratio  = window.devicePixelRatio || 1;
+
+    canvas.width  = Math.floor(width * ratio);
+    canvas.height = Math.floor(height * ratio);
+    canvas.style.width  = width + 'px';
+    canvas.style.height = height + 'px';
+
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(ratio, ratio);
+
+    resetRound(true); // reset positions
+  }
+  window.addEventListener('resize', resize);
+
+  // ----- Constants -----
+  const PADDLE_W = 14;
+  const PADDLE_H = 100;
+  const PADDLE_SPEED = 420;
+  const BALL_SPEED   = 520;
+  const BALL_R       = 10;
+
+  // ----- State -----
+  const keys = new Set<string>();
+
+  const player1 = { x: 40, y: 0, w: PADDLE_W, h: PADDLE_H, score: 0 };
+  const player2 = { x: 0,  y: 0, w: PADDLE_W, h: PADDLE_H, score: 0 };
+
+  const ball = {
+    x: 0, y: 0, r: BALL_R,
+    vx: 0, vy: 0, speed: BALL_SPEED,
+    serveDir: 1
+  };
+
+  function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
+
+  // ----- Input -----
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowUp','ArrowDown','w','W','s','S'].includes(e.key)) e.preventDefault();
+    keys.add(e.key);
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.key));
+
+  // ----- Reset / New round -----
+  function resetRound(centerOnly = false) {
+    player1.y = height / 2;
+    player2.x = width - 40;
+    player2.y = height / 2;
+
+    ball.x = width / 2;
+    ball.y = height / 2;
+
+    if (centerOnly) return;
+
+    const angle = (Math.random() * 0.5 - 0.25); // [-14°, +14°]
+    ball.vx = Math.cos(angle) * ball.speed * ball.serveDir;
+    ball.vy = Math.sin(angle) * ball.speed;
+  }
+
+  // ----- Collision -----
+  function circleRectCollide(cx: number, cy: number, cr: number, rx: number, ry: number, rw: number, rh: number) {
+    const left = rx - rw/2, right = rx + rw/2;
+    const top  = ry - rh/2, bottom = ry + rh/2;
+    const closestX = clamp(cx, left, right);
+    const closestY = clamp(cy, top, bottom);
+    const dx = cx - closestX, dy = cy - closestY;
+    return (dx*dx + dy*dy) <= cr*cr;
+  }
+
+  function bounceOnPaddle(paddle: typeof player1) {
+    const rel = clamp((ball.y - paddle.y) / (paddle.h / 2), -1, 1);
+    const maxAngle = Math.PI / 4;
+    const angle = rel * maxAngle;
+    const dir = (paddle === player1) ? 1 : -1;
+
+    ball.vx = Math.cos(angle) * ball.speed * dir;
+    ball.vy = Math.sin(angle) * ball.speed;
+
+    if (dir > 0) ball.x = paddle.x + paddle.w/2 + ball.r + 0.5;
+    else         ball.x = paddle.x - paddle.w/2 - ball.r - 0.5;
+  }
+
+  // ----- Update loop -----
+  let last = performance.now();
+  function step(now: number) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+
+    // Paddle movement
+    let dy1 = 0, dy2 = 0;
+    if (keys.has('w') || keys.has('W')) dy1 -= 1;
+    if (keys.has('s') || keys.has('S')) dy1 += 1;
+    if (keys.has('ArrowUp'))    dy2 -= 1;
+    if (keys.has('ArrowDown'))  dy2 += 1;
+
+    player1.y += dy1 * PADDLE_SPEED * dt;
+    player2.y += dy2 * PADDLE_SPEED * dt;
+
+    player1.y = clamp(player1.y, PADDLE_H/2, height - PADDLE_H/2);
+    player2.y = clamp(player2.y, PADDLE_H/2, height - PADDLE_H/2);
+
+    // Move ball
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    // Bounce top/bottom
+    if (ball.y - ball.r < 0) {
+      ball.y = ball.r; ball.vy *= -1;
+    } else if (ball.y + ball.r > height) {
+      ball.y = height - ball.r; ball.vy *= -1;
+    }
+
+    // Paddle collision
+    if (circleRectCollide(ball.x, ball.y, ball.r, player1.x, player1.y, player1.w, player1.h)) bounceOnPaddle(player1);
+    if (circleRectCollide(ball.x, ball.y, ball.r, player2.x, player2.y, player2.w, player2.h)) bounceOnPaddle(player2);
+
+    // Score
+    if (ball.x + ball.r < 0) {
+      player2.score++; ball.serveDir = -1; resetRound(false);
+    } else if (ball.x - ball.r > width) {
+      player1.score++; ball.serveDir = 1; resetRound(false);
+    }
+
+    draw();
+    requestAnimationFrame(step);
+  }
+
+  // ----- Draw -----
+  function draw() {
+    ctx.clearRect(0,0,width,height);
+
+    // Center line
+    ctx.beginPath();
+    ctx.setLineDash([8,16]);
+    ctx.moveTo(width/2,0);
+    ctx.lineTo(width/2,height);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Ball
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+    ctx.fillStyle = '#000';
+    ctx.fill();
+
+    // Paddles
+    ctx.fillRect(player1.x - player1.w/2, player1.y - player1.h/2, player1.w, player1.h);
+    ctx.fillRect(player2.x - player2.w/2, player2.y - player2.h/2, player2.w, player2.h);
+
+    // Score
+    ctx.font = '20px Arial';
+    ctx.fillText(`P1: ${player1.score}`, 24, 28);
+    ctx.fillText(`P2: ${player2.score}`, width - 100, 28);
+  }
+
+  // ----- Start -----
+  resize();
+  resetRound(false);
+  requestAnimationFrame(step);
+}
+

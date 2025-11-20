@@ -102,6 +102,8 @@ CREATE TABLE Match (
     tournament_id INTEGER NOT NULL,
     FOREIGN KEY (player1) REFERENCES Player(player_id) ON DELETE CASCADE,
     FOREIGN KEY (player2) REFERENCES Player(player_id) ON DELETE CASCADE,
+    FOREIGN KEY (player3) REFERENCES Player(player_id) ON DELETE CASCADE,
+    FOREIGN KEY (player4) REFERENCES Player(player_id) ON DELETE CASCADE,
     FOREIGN KEY (winner) REFERENCES Player(player_id) ON DELETE SET NULL,
     FOREIGN KEY (tournament_id) REFERENCES Tournament(tournament_id) ON DELETE CASCADE
 );

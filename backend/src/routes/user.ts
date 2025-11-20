@@ -281,7 +281,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
         }
     });
     //Sent requestS
-    fastify.get("/user/:id/sent-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    fastify.get("/:id/sent-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
         try {
             const sent = await fastify.db.all(
@@ -298,7 +298,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     });
 
     // Incoming friend requests
-    fastify.get("/user/:id/friend-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    fastify.get("/:id/friend-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
 
         try {
@@ -315,22 +315,29 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
         }
     });
 
+    // --- use global onlineUsers from socket.ts ---
+    const onlineUsers = fastify.onlineUsers;
+
     // List friends with online info
-    fastify.get("/user/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    fastify.get("/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
+
         try {
             const friends = await fastify.db.all(
-                `SELECT f.friend_id AS id, u.username, f.status
-                 FROM Friend f
-                 JOIN User u ON f.friend_id = u.id
-                 WHERE f.user_id = ? AND f.status='accepted'`,
-                [id]
+                `SELECT u.id, u.username
+                FROM User u
+                JOIN Friend f 
+                    ON ((f.user_id = ? AND f.friend_id = u.id)
+                    OR (f.friend_id = ? AND f.user_id = u.id))
+                WHERE f.status = 'accepted'`,
+                [id, id]
             );
 
             const result = friends.map((f: any) => ({
                 ...f,
-                online: onlineUsers.has(f.id)
+                online: onlineUsers.has(f.id)   // <-- ONLINE STATUS HERE
             }));
+
             reply.send({ success: true, friends: result });
         } catch (err: any) {
             reply.code(500).send({ success: false, error: err.message });
@@ -340,38 +347,33 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
   // ----------------------------
   // Accept friend request
   // ----------------------------
-  fastify.put("/friend/accept", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    //const { userId, friendId } = req.body as any;
-      const { userId } = req.body as any; // the sender of the request
-      const friendId = (req.user as any).id; // current logged-in user
-    try {
-      await fastify.db.run(
-        "UPDATE Friend SET status='accepted' WHERE user_id=? AND friend_id=?",
-          [userId, friendId]
-      );
+ fastify.put("/friend/accept", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+  const { userId } = req.body as any; // sender ID
+  const friendId = (req.user as any).id; // receiver ID
 
-      const exists = await fastify.db.get(
-        "SELECT 1 FROM Friend WHERE user_id=? AND friend_id=?",
-          [friendId, userId]
-      );
-      if (!exists) {
-        await fastify.db.run(
-          "INSERT INTO Friend (user_id, friend_id, status) VALUES (?, ?, 'accepted')",
-            [friendId, userId]
-        );
-      }
+  try {
+    // Update the existing pending request (either direction)
+    const result = await fastify.db.run(
+      `UPDATE Friend
+       SET status='accepted'
+       WHERE (user_id=? AND friend_id=?)
+          OR (user_id=? AND friend_id=?)`,
+      [userId, friendId, friendId, userId]
+    );
 
-      // Update friend count for both users
+    // Increase stats only if the row was actually updated
+    if (result.changes > 0) {
       await fastify.db.run(
         "UPDATE UserStats SET friends = friends + 1 WHERE user_id IN (?, ?)",
         [userId, friendId]
       );
-
-      reply.send({ success: true });
-    } catch (err: any) {
-      reply.code(500).send({ success: false, error: err.message });
     }
-  });
+
+    reply.send({ success: true });
+  } catch (err: any) {
+    reply.code(500).send({ success: false, error: err.message });
+  }
+});
  
 // ----------------------------
 // Get Match History
