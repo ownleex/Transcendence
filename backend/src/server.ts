@@ -16,7 +16,7 @@ import userRoutes from "./routes/user";
 import tournamentRoutes from "./routes/tournament";
 import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notification";
-import { setupWebSocket } from "./ws/game";
+import { setupGameWS } from "./ws/game";
 import authRoutes from "./routes/auth";
 //import socketPlugin from "./routes/socket";
 import { setupSocket, onlineUsers } from "./routes/socket";
@@ -74,6 +74,8 @@ fastify.decorate(
 );
 fastify.decorate("onlineUsers", onlineUsers);
 setupSocket(fastify);
+setupGameWS(fastify);
+
 // -------------------------
 // API Routes
 // -------------------------
@@ -194,7 +196,7 @@ fastify.setNotFoundHandler((req, reply) => {
 const start = async () => {
     try {
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
-        setupWebSocket(fastify.server as http.Server);
+        //setupWebSocket(fastify.server as http.Server);
         console.log("🚀 Transcendence running at https://localhost:3000");
     } catch (err) {
         fastify.log.error(err);
