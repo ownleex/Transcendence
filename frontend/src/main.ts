@@ -5,15 +5,15 @@ import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSe
 
 const app = document.getElementById("pongContent")!;
 
+// -------------------------
+// Router for hash navigation
+// -------------------------
 function router() {
     const hash = window.location.hash;
-
-    app.innerHTML = ""; 
+    app.innerHTML = "";
 
     if (!hash || hash === "#home") {
         showHome(app);
-    } else if (hash === "#game") {
-        showGame(app);
     } else if (hash === "#tournament") {
         showTournament(app);
     } else {
@@ -21,14 +21,82 @@ function router() {
     }
 }
 
-// Top navbar buttons
-document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
-document.getElementById("tournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
+// -------------------------
+// Quick play buttons
+// -------------------------
+document.getElementById("playDuoBtn")!.onclick = () => {
+    showGame(app, "duo");
+};
 
+document.getElementById("playQuadBtn")!.onclick = () => { 
+    showGame(app, "quad");
+};
+
+// -------------------------
+// Top navbar buttons
+// -------------------------
+document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
+document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
+
+// -------------------------
+// Event listeners for routing
+// -------------------------
 window.addEventListener("hashchange", router);
 window.addEventListener("load", router);
+/*
+const app = document.getElementById("pongContent")!;
+let currentCleanup: (() => void) | null = null; // cleanup function for the current page
 
+// -------------------------
+// Router for hash navigation
+// -------------------------
+function router() {
+    const hash = window.location.hash;
 
+    // Cleanup current page
+    if (currentCleanup) {
+        currentCleanup();
+        currentCleanup = null;
+    }
+
+    app.innerHTML = "";
+
+    if (!hash || hash === "#home") {
+        showHome(app);
+    } else if (hash === "#tournament") {
+        showTournament(app);
+    } else if (hash === "#duo") {
+        showGame(app, "duo").then(cleanup => { currentCleanup = cleanup; });
+    } else if (hash === "#quad") {
+        showGame(app, "quad").then(cleanup => { currentCleanup = cleanup; });
+    } else {
+        app.innerHTML = `<p class="text-red-500">Page not found</p>`;
+    }
+}
+
+// -------------------------
+// Quick play buttons
+// -------------------------
+document.getElementById("playDuoBtn")!.onclick = () => {
+    window.location.hash = "#duo";
+};
+
+document.getElementById("playQuadBtn")!.onclick = () => {
+    window.location.hash = "#quad";
+};
+
+// -------------------------
+// Top navbar buttons
+// -------------------------
+document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
+document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
+
+// -------------------------
+// Event listeners for routing
+// -------------------------
+window.addEventListener("hashchange", router);
+window.addEventListener("load", router);
+*/
 const me = JSON.parse(localStorage.getItem("me") || "{}");
 const currentUserId = me.id;
 
