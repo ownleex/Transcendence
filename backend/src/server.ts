@@ -16,10 +16,16 @@ import userRoutes from "./routes/user";
 import tournamentRoutes from "./routes/tournament";
 import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notification";
+<<<<<<< HEAD
+//import { setupWebSocket } from "./ws/websocket";
+=======
 import { setupGameWS } from "./ws/game";
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 import authRoutes from "./routes/auth";
+//import { setupGameWS } from "./ws/game";
+import { setupGameWS } from "./ws/game";
 //import socketPlugin from "./routes/socket";
-import { setupSocket, onlineUsers } from "./routes/socket";
+import { onlineUsers } from "./routes/socket";
 
 // -------------------------
 // Load environment variables
@@ -49,13 +55,6 @@ fastify.register(fastifyCookie, {
 });
 
 // -------------------------
-// Register plugins
-// -------------------------
-fastify.register(fastifyCors, { origin: "*" });
-fastify.register(dbPlugin);
-fastify.register(fastifyMultipart);
-
-// -------------------------
 // JWT Setup (before routes)
 // -------------------------
 fastify.register(fastifyJwt, {
@@ -73,7 +72,21 @@ fastify.decorate(
   }
 );
 fastify.decorate("onlineUsers", onlineUsers);
+<<<<<<< HEAD
+
+// -------------------------
+// Register plugins
+// -------------------------
+fastify.register(fastifyCors, { origin: "*" });
+fastify.register(dbPlugin);
+fastify.register(fastifyMultipart);
+
+// -------------------------
+// WebSocket Setup (combined)
+// -------------------------
+=======
 setupSocket(fastify);
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 setupGameWS(fastify);
 
 // -------------------------
@@ -196,7 +209,11 @@ fastify.setNotFoundHandler((req, reply) => {
 const start = async () => {
     try {
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
+<<<<<<< HEAD
+        //setupRawWebSocket(fastify.server as http.Server);
+=======
         //setupWebSocket(fastify.server as http.Server);
+>>>>>>> 0017754e22b5806351568627741beb285100252f
         console.log("🚀 Transcendence running at https://localhost:3000");
     } catch (err) {
         fastify.log.error(err);

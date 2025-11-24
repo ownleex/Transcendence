@@ -1,10 +1,16 @@
+/*
 import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
 import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests } from "./api";
 
 const app = document.getElementById("pongContent")!;
+<<<<<<< HEAD
+const app1 = document.getElementById("friends-panel")!;
+const gameContainer = document.getElementById("gameContainer")!;
+=======
 
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 // -------------------------
 // Router for hash navigation
 // -------------------------
@@ -13,9 +19,15 @@ function router() {
     app.innerHTML = "";
 
     if (!hash || hash === "#home") {
+<<<<<<< HEAD
+        showHome(app);  
+=======
         showHome(app);
+>>>>>>> 0017754e22b5806351568627741beb285100252f
     } else if (hash === "#tournament") {
         showTournament(app);
+    } else if (hash === "#friends") {
+    	showFriends(app1);
     } else {
         app.innerHTML = `<p class="text-red-500">Page not found</p>`;
     }
@@ -25,6 +37,19 @@ function router() {
 // Quick play buttons
 // -------------------------
 document.getElementById("playDuoBtn")!.onclick = () => {
+<<<<<<< HEAD
+    showGame(gameContainer, "duo");
+};
+
+document.getElementById("playQuadBtn")!.onclick = () => {
+    showGame(gameContainer, "quad");
+};
+// Top navbar buttons
+document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
+document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
+document.getElementById("friends-panel")!.onclick = () => (window.location.hash = "#friends");
+
+=======
     showGame(app, "duo");
 };
 
@@ -38,11 +63,80 @@ document.getElementById("playQuadBtn")!.onclick = () => {
 document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
 document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
 
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 // -------------------------
 // Event listeners for routing
 // -------------------------
 window.addEventListener("hashchange", router);
 window.addEventListener("load", router);
+<<<<<<< HEAD
+*/
+import { showHome } from "./home";
+import { showGame } from "./pong";
+import { showTournament } from "./tournament";
+import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests } from "./api";
+import { io } from "socket.io-client";
+
+window.addEventListener("DOMContentLoaded", () => {
+    const app = document.getElementById("pongContent")!;
+    const gameContainer = document.getElementById("gameContainer")!;
+
+    // -------------------------
+    // Router for hash navigation
+    // -------------------------
+    function router() {
+        const hash = window.location.hash;
+
+        // Keep #gameContainer intact, only update app content
+        const appContent = document.createElement("div");
+        appContent.id = "appContent";
+
+        if (!hash || hash === "#home") {
+            showHome(appContent);
+        } else if (hash === "#tournament") {
+            showTournament(appContent);
+        } else {
+            appContent.innerHTML = `<p class="text-red-500">Page not found</p>`;
+        }
+
+        // Clear old content except #gameContainer
+        const oldContent = document.getElementById("appContent");
+        if (oldContent) oldContent.remove();
+        app.prepend(appContent);
+    }
+
+    // -------------------------
+    // Quick play buttons
+    // -------------------------
+    const playDuoBtn = document.getElementById("playDuoBtn");
+    const playQuadBtn = document.getElementById("playQuadBtn");
+
+    playDuoBtn?.addEventListener("click", () => {
+        showGame(gameContainer, "duo");
+    });
+
+    playQuadBtn?.addEventListener("click", () => {
+        showGame(gameContainer, "quad");
+    });
+
+    // -------------------------
+    // Top navbar buttons
+    // -------------------------
+    const homeBtn = document.getElementById("homeBtn");
+    const viewTournamentBtn = document.getElementById("viewtournamentBtn");
+
+    homeBtn?.addEventListener("click", () => window.location.hash = "#home");
+    viewTournamentBtn?.addEventListener("click", () => window.location.hash = "#tournament");
+
+    // -------------------------
+    // Event listeners for routing
+    // -------------------------
+    window.addEventListener("hashchange", router);
+
+    // Initial render
+    router();
+});
+=======
 /*
 const app = document.getElementById("pongContent")!;
 let currentCleanup: (() => void) | null = null; // cleanup function for the current page
@@ -52,6 +146,7 @@ let currentCleanup: (() => void) | null = null; // cleanup function for the curr
 // -------------------------
 function router() {
     const hash = window.location.hash;
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 
     // Cleanup current page
     if (currentCleanup) {
@@ -107,16 +202,33 @@ window.showFriendsPanel = function () {
 };
 
 // ----------------------------
-// Load all friend data
+// Friends (accepted)
 // ----------------------------
-async function loadAllFriendsData() {
-    await loadFriendList();
-    await loadIncomingRequests();
-    await loadSentRequests();
+let socket: ReturnType<typeof io> | null = null;
+
+function initSocket(friendsIds: number[]) {
+    if (!socket) {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        socket = io("https://localhost:3000", { auth: { token } });
+
+        // Friend online/offline updates
+        socket.on("user:online", ({ userId }) => updateFriendStatus(userId, true));
+        socket.on("user:offline", ({ userId }) => updateFriendStatus(userId, false));
+
+        socket.on("connect", () => {
+            socket!.emit("get:onlineFriends", friendsIds);
+        });
+
+        socket.on("onlineFriends", (onlineIds: number[]) => {
+            onlineIds.forEach(id => updateFriendStatus(id, true));
+        });
+    }
 }
 
 // ----------------------------
-// Friends (accepted)
+// Load friend list
 // ----------------------------
 async function loadFriendList() {
     const container = document.getElementById("friends-list")!;
@@ -129,18 +241,34 @@ async function loadFriendList() {
     }
 
     container.innerHTML = "";
+
     res.friends.forEach(friend => {
         const item = document.createElement("div");
+        item.id = `friend-${friend.id}`;
+        item.setAttribute("data-user-id", friend.id.toString());
         item.className = "p-2 border rounded mb-1 flex justify-between items-center";
 
         item.innerHTML = `
             <span>${friend.username}</span>
-            <span class="${friend.online ? "text-green-500" : "text-gray-500"}">
-                ${friend.online ? "● online" : "○ offline"}
-            </span>
+            <span class="status text-gray-500">○ offline</span>
         `;
+
         container.appendChild(item);
     });
+
+    // Init socket now that we have friend IDs
+    initSocket(res.friends.map(f => f.id));
+}
+
+// ----------------------------
+// Update friend status dynamically
+// ----------------------------
+function updateFriendStatus(userId: number, online: boolean) {
+    const el = document.querySelector(`[data-user-id="${userId}"] .status`);
+    if (el) {
+        el.textContent = online ? "● online" : "○ offline";
+        el.className = online ? "status text-green-500" : "status text-gray-500";
+    }
 }
 
 // ----------------------------
@@ -180,6 +308,15 @@ async function loadIncomingRequests() {
             if (result.success) loadAllFriendsData();
         });
     });
+}
+
+// ----------------------------
+// Load all friend data
+// ----------------------------
+async function loadAllFriendsData() {
+    await loadFriendList();
+    await loadIncomingRequests();
+    await loadSentRequests();
 }
 
 // ----------------------------
