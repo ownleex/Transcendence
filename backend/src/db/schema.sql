@@ -129,5 +129,6 @@ INSERT INTO User (username, password, email) VALUES
 ALTER TABLE User ADD COLUMN avatar TEXT DEFAULT '/uploads/default.png';
 ALTER TABLE OAuth ADD COLUMN access_token TEXT;
 ALTER TABLE OAuth ADD COLUMN refresh_token TEXT;
+ALTER TABLE OAuth ADD COLUMN expires_at INTEGER;
 ALTER TABLE Tournament ADD COLUMN WinnerId INTEGER NOT NULL;
 ALTER TABLE Tournament ADD COLUMN WinnerName TEXT;

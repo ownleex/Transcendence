@@ -13,23 +13,15 @@ window.addEventListener("DOMContentLoaded", () => {
     // -------------------------
     function router() {
         const hash = window.location.hash;
-
-        // Keep #gameContainer intact, only update app content
-        const appContent = document.createElement("div");
-        appContent.id = "appContent";
+        app.innerHTML = "";
 
         if (!hash || hash === "#home") {
-            showHome(appContent);
+            showHome(app);
         } else if (hash === "#tournament") {
-            showTournament(appContent);
+            showTournament(app);
         } else {
-            appContent.innerHTML = `<p class="text-red-500">Page not found</p>`;
+            app.innerHTML = `<p class="text-red-500">Page not found</p>`;
         }
-
-        // Clear old content except #gameContainer
-        const oldContent = document.getElementById("appContent");
-        if (oldContent) oldContent.remove();
-        app.prepend(appContent);
     }
 
     // -------------------------
