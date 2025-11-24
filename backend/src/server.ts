@@ -16,10 +16,12 @@ import userRoutes from "./routes/user";
 import tournamentRoutes from "./routes/tournament";
 import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notification";
-import { setupWebSocket } from "./ws/game";
+//import { setupWebSocket } from "./ws/websocket";
 import authRoutes from "./routes/auth";
+//import { setupGameWS } from "./ws/game";
+import { setupGameWS } from "./ws/game";
 //import socketPlugin from "./routes/socket";
-import { setupSocket, onlineUsers } from "./routes/socket";
+import { onlineUsers } from "./routes/socket";
 
 // -------------------------
 // Load environment variables
@@ -49,13 +51,6 @@ fastify.register(fastifyCookie, {
 });
 
 // -------------------------
-// Register plugins
-// -------------------------
-fastify.register(fastifyCors, { origin: "*" });
-fastify.register(dbPlugin);
-fastify.register(fastifyMultipart);
-
-// -------------------------
 // JWT Setup (before routes)
 // -------------------------
 fastify.register(fastifyJwt, {
@@ -73,7 +68,19 @@ fastify.decorate(
   }
 );
 fastify.decorate("onlineUsers", onlineUsers);
-setupSocket(fastify);
+
+// -------------------------
+// Register plugins
+// -------------------------
+fastify.register(fastifyCors, { origin: "*" });
+fastify.register(dbPlugin);
+fastify.register(fastifyMultipart);
+
+// -------------------------
+// WebSocket Setup (combined)
+// -------------------------
+setupGameWS(fastify);
+
 // -------------------------
 // API Routes
 // -------------------------
@@ -194,7 +201,7 @@ fastify.setNotFoundHandler((req, reply) => {
 const start = async () => {
     try {
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
-        setupWebSocket(fastify.server as http.Server);
+        //setupRawWebSocket(fastify.server as http.Server);
         console.log("🚀 Transcendence running at https://localhost:3000");
     } catch (err) {
         fastify.log.error(err);
