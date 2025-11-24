@@ -64,8 +64,25 @@ window.addEventListener("DOMContentLoaded", () => {
     router();
 });
 
-const me = JSON.parse(localStorage.getItem("me") || "{}");
+// -------------------------
+// Hybrid storage for user/session
+// -------------------------
+let me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
+let token = sessionStorage.getItem("token") || localStorage.getItem("token");
 const currentUserId = me.id;
+
+// Store user in sessionStorage on login
+window.saveUserSession = function (user: any) {
+    sessionStorage.setItem("me", JSON.stringify(user));
+    sessionStorage.setItem("token", user.token);
+
+    // Optional: also persist in localStorage for regular sessions
+    localStorage.setItem("me", JSON.stringify(user));
+    localStorage.setItem("token", user.token);
+
+    me = user;
+    token = user.token;
+};
 
 // Show friends panel
 window.showFriendsPanel = function () {
