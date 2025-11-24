@@ -5,18 +5,25 @@ import { showTournament } from "./tournament";
 import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests } from "./api";
 
 const app = document.getElementById("pongContent")!;
+<<<<<<< HEAD
 const app1 = document.getElementById("friends-panel")!;
 const gameContainer = document.getElementById("gameContainer")!;
+=======
+
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 // -------------------------
 // Router for hash navigation
 // -------------------------
 function router() {
     const hash = window.location.hash;
-
-    app.innerHTML = ""; 
+    app.innerHTML = "";
 
     if (!hash || hash === "#home") {
+<<<<<<< HEAD
         showHome(app);  
+=======
+        showHome(app);
+>>>>>>> 0017754e22b5806351568627741beb285100252f
     } else if (hash === "#tournament") {
         showTournament(app);
     } else if (hash === "#friends") {
@@ -30,6 +37,7 @@ function router() {
 // Quick play buttons
 // -------------------------
 document.getElementById("playDuoBtn")!.onclick = () => {
+<<<<<<< HEAD
     showGame(gameContainer, "duo");
 };
 
@@ -41,11 +49,27 @@ document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#ho
 document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
 document.getElementById("friends-panel")!.onclick = () => (window.location.hash = "#friends");
 
+=======
+    showGame(app, "duo");
+};
+
+document.getElementById("playQuadBtn")!.onclick = () => { 
+    showGame(app, "quad");
+};
+
+// -------------------------
+// Top navbar buttons
+// -------------------------
+document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
+document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
+
+>>>>>>> 0017754e22b5806351568627741beb285100252f
 // -------------------------
 // Event listeners for routing
 // -------------------------
 window.addEventListener("hashchange", router);
 window.addEventListener("load", router);
+<<<<<<< HEAD
 */
 import { showHome } from "./home";
 import { showGame } from "./pong";
@@ -112,7 +136,62 @@ window.addEventListener("DOMContentLoaded", () => {
     // Initial render
     router();
 });
+=======
+/*
+const app = document.getElementById("pongContent")!;
+let currentCleanup: (() => void) | null = null; // cleanup function for the current page
 
+// -------------------------
+// Router for hash navigation
+// -------------------------
+function router() {
+    const hash = window.location.hash;
+>>>>>>> 0017754e22b5806351568627741beb285100252f
+
+    // Cleanup current page
+    if (currentCleanup) {
+        currentCleanup();
+        currentCleanup = null;
+    }
+
+    app.innerHTML = "";
+
+    if (!hash || hash === "#home") {
+        showHome(app);
+    } else if (hash === "#tournament") {
+        showTournament(app);
+    } else if (hash === "#duo") {
+        showGame(app, "duo").then(cleanup => { currentCleanup = cleanup; });
+    } else if (hash === "#quad") {
+        showGame(app, "quad").then(cleanup => { currentCleanup = cleanup; });
+    } else {
+        app.innerHTML = `<p class="text-red-500">Page not found</p>`;
+    }
+}
+
+// -------------------------
+// Quick play buttons
+// -------------------------
+document.getElementById("playDuoBtn")!.onclick = () => {
+    window.location.hash = "#duo";
+};
+
+document.getElementById("playQuadBtn")!.onclick = () => {
+    window.location.hash = "#quad";
+};
+
+// -------------------------
+// Top navbar buttons
+// -------------------------
+document.getElementById("homeBtn")!.onclick = () => (window.location.hash = "#home");
+document.getElementById("viewtournamentBtn")!.onclick = () => (window.location.hash = "#tournament");
+
+// -------------------------
+// Event listeners for routing
+// -------------------------
+window.addEventListener("hashchange", router);
+window.addEventListener("load", router);
+*/
 const me = JSON.parse(localStorage.getItem("me") || "{}");
 const currentUserId = me.id;
 

@@ -19,6 +19,7 @@ export function setupSocket(fastify: FastifyInstance) {
 
     // Attach to Fastify instance
     fastify.decorate("io", io);
+    //fastify.decorate("onlineUsers", onlineUsers);
 
     io.on("connection", async (socket: AuthenticatedSocket) => {
         // --- Authenticate user from token ---
