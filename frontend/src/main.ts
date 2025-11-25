@@ -1,7 +1,7 @@
 import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
-import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests } from "./api";
+import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend } from "./api";
 import { io } from "socket.io-client";
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -130,7 +130,7 @@ async function loadFriendList() {
         item.className = "p-2 border rounded mb-1 flex justify-between items-center";
 
         item.innerHTML = `
-            <span>${friend.username}</span>
+            <span class="text-gray-500">${friend.username}</span>
             <span class="status text-gray-500">○ offline</span>
         `;
 
@@ -155,31 +155,34 @@ function updateFriendStatus(userId: number, online: boolean) {
 // ----------------------------
 // Incoming friend requests
 // ----------------------------
-async function loadIncomingRequests() {
-    const container = document.getElementById("friends-incoming")!;
-    container.innerHTML = "Loading...";
+    async function loadIncomingRequests() {
+        const container = document.getElementById("friends-incoming")!;
+        container.innerHTML = "Loading...";
 
-    const res = await getIncomingRequests(currentUserId);
-    if (!res.success) {
-        container.innerHTML = "Failed to load requests";
-        return;
-    }
+        const res = await getIncomingRequests(currentUserId);
+        if (!res.success) {
+            container.innerHTML = "Failed to load requests";
+            return;
+        }
 
-    container.innerHTML = "";
-    res.requests.forEach(req => {
-        const div = document.createElement("div");
-        div.className = "p-2 border rounded mb-1 flex justify-between items-center";
+        container.innerHTML = "";
 
-        div.innerHTML = `
-            <span>${req.username}</span>
-            <button class="accept-btn px-2 py-1 bg-green-600 text-white text-xs rounded" data-id="${req.id}">
-                Accept
-            </button>
-        `;
-        container.appendChild(div);
-    });
+        res.requests.forEach(req => {
+            const div = document.createElement("div");
+            div.className = "p-2 border rounded mb-1 flex justify-between items-center";
 
-    // Attach event listeners
+            div.innerHTML = `
+                <span>${req.username}</span>
+                <div class="flex gap-2">
+                    <button class="accept-btn px-2 py-1 bg-green-600 text-white text-xs rounded" data-id="${req.id}">Accept</button>
+                    <button class="block-btn px-2 py-1 bg-red-600 text-white text-xs rounded" data-id="${req.id}">Block</button>
+                </div>
+            `;
+
+            container.appendChild(div);
+        });
+        
+      // Attach event listeners
     container.querySelectorAll(".accept-btn").forEach(btn => {
         btn.addEventListener("click", async () => {
             const friendId = btn.getAttribute("data-id");
@@ -190,8 +193,28 @@ async function loadIncomingRequests() {
         });
     });
 }
+  // ----------------------------
+    // Event listener for accept/block
+    // ----------------------------
+    document.addEventListener("click", async (e) => {
+        const target = e.target as HTMLElement;
 
-// ----------------------------
+        if (target.classList.contains("accept-btn")) {
+            const requesterId = Number(target.dataset.id);
+            await acceptFriend(requesterId);
+            loadIncomingRequests();
+            loadSentRequests();
+        }
+
+        if (target.classList.contains("block-btn")) {
+            const userIdToBlock = Number(target.dataset.id);
+            await blockFriend(userIdToBlock);
+            loadIncomingRequests();
+            loadSentRequests();
+        }
+    });
+
+    // ----------------------------
 // Load all friend data
 // ----------------------------
 async function loadAllFriendsData() {
@@ -218,9 +241,19 @@ async function loadSentRequests() {
         const div = document.createElement("div");
         div.className = "p-2 border rounded mb-1 flex justify-between items-center";
 
+          // Status text depending on friend.status
+        let statusText = "";
+        if (req.status === "pending") {
+            statusText = `<span class="text-yellow-500 text-xs">Pending</span>`;
+        } else if (req.status === "blocked") {
+            statusText = `<span class="text-red-600 text-xs">Blocked</span>`;
+        } else {
+            statusText = `<span class="text-gray-400 text-xs">${req.status}</span>`;
+        }
+
         div.innerHTML = `
             <span>${req.username}</span>
-            <span class="text-yellow-500 text-xs">Pending</span>
+            ${statusText}
         `;
 
         container.appendChild(div);

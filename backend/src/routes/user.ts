@@ -241,9 +241,6 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
   // Send friend request using username
   // ----------------------------
       fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-        // --- DEBUG LOGS ---
-        console.log("Friend request body:", req.body);
-        console.log("Authenticated user:", req.user);
         const { username } = req.body as any;
         const userId = req.user.id;
 
@@ -256,8 +253,10 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
 
             // Prevent duplicate requests
             const existing = await fastify.db.get(
-                "SELECT 1 FROM Friend WHERE user_id=? AND friend_id=?",
-                [userId, friend.id]
+                `SELECT 1 FROM Friend 
+                WHERE (user_id=? AND friend_id=?)
+                    OR (user_id=? AND friend_id=?)`,
+                [userId, friend.id, friend.id, userId]
             );
             if (existing) return reply.code(400).send({ success: false, error: "Friend request already sent" });
 
@@ -285,10 +284,10 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
         const { id } = req.params as any;
         try {
             const sent = await fastify.db.all(
-                `SELECT f.friend_id AS id, u.username
+                `SELECT f.friend_id AS id, u.username, f.status
                  FROM Friend f
                  JOIN User u ON f.friend_id = u.id
-                 WHERE f.user_id = ? AND f.status = 'pending'`,
+                 WHERE f.user_id = ? AND (f.status = 'pending' OR f.status = 'blocked')`,
                 [id]
             );
             reply.send({ success: true, sent });
@@ -303,10 +302,10 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
 
         try {
             const requests = await fastify.db.all(
-             `SELECT f.user_id AS id, u.username
+             `SELECT f.user_id AS id, u.username, f.status
              FROM Friend f
              JOIN User u ON f.user_id = u.id
-             WHERE f.friend_id = ? AND f.status = 'pending'`,
+             WHERE f.friend_id = ? AND (f.status = 'pending' OR f.status = 'blocked')`,
                 [id]
             );
             reply.send({ success: true, requests }); 
@@ -374,7 +373,25 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     reply.code(500).send({ success: false, error: err.message });
   }
 });
- 
+ fastify.put("/friend/block", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { userId } = req.body as any;  // the person being blocked
+    const blockerId = (req.user as any).id;
+
+    try {
+        await fastify.db.run(
+            `UPDATE Friend
+             SET status='blocked'
+             WHERE (user_id=? AND friend_id=?)
+                OR (user_id=? AND friend_id=?)`,
+            [blockerId, userId, userId, blockerId]
+        );
+
+        reply.send({ success: true });
+    } catch (err: any) {
+        reply.code(500).send({ success: false, error: err.message });
+    }
+});
+
 // ----------------------------
 // Get Match History
 // ----------------------------
