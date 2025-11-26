@@ -236,6 +236,12 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
         }
     }
 );
+    async function addFriendHistoryEvent(db: any, userId: number) {
+        await db.run(
+            "INSERT INTO FriendsHistory (user_id, count) VALUES (?, 1)",
+            [userId]
+        );
+    }
 
   // ----------------------------
   // Send friend request using username
@@ -367,7 +373,8 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
         [userId, friendId]
       );
     }
-
+      await addFriendHistoryEvent(fastify.db, userId);
+      await addFriendHistoryEvent(fastify.db, friendId);
     reply.send({ success: true });
   } catch (err: any) {
     reply.code(500).send({ success: false, error: err.message });
@@ -384,8 +391,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
              WHERE (user_id=? AND friend_id=?)
                 OR (user_id=? AND friend_id=?)`,
             [blockerId, userId, userId, blockerId]
-        );
-
+        );        
         reply.send({ success: true });
     } catch (err: any) {
         reply.code(500).send({ success: false, error: err.message });
