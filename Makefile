@@ -23,6 +23,12 @@ down:
 stop:
 	@docker compose stop
 
+ps:
+	@docker compose ps
+
+log:
+	@docker compose logs -f
+
 clean:
 	@echo "$(YELLOW)🛑 Stopping containers...$(NC)"
 	@docker compose down
@@ -38,4 +44,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all up down stop clean fclean re
+.PHONY: all up down stop clean fclean re ps log

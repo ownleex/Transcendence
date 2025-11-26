@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { blockchainService } from "../services/blockchain";
 
 export default async function tournamentRoutes(fastify: FastifyInstance) {
   // ----------------------------
@@ -90,24 +91,27 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     }
   });
 
- fastify.get("/tournament/:id/players", async (req, reply) => {
-  const { id } = req.params as any;
-  try {
-    const players = await fastify.db.all(
-      `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username
-       FROM Player p
-       JOIN User u ON p.user_id = u.id
-       WHERE p.tournament_id = ?`,
-      [id]
-    );
-    reply.send(players);
-  } catch (err) {
-    reply.status(500).send({ success: false, error: (err as Error).message });
-  }
-});
+  // ----------------------------
+  // Get tournament players
+  // ----------------------------
+  fastify.get("/tournament/:id/players", async (req, reply) => {
+    const { id } = req.params as any;
+    try {
+      const players = await fastify.db.all(
+        `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username
+         FROM Player p
+         JOIN User u ON p.user_id = u.id
+         WHERE p.tournament_id = ?`,
+        [id]
+      );
+      reply.send(players);
+    } catch (err) {
+      reply.status(500).send({ success: false, error: (err as Error).message });
+    }
+  });
 
   // ----------------------------
-  // Update tournament status
+  // Update tournament status (MODIFIÉ POUR BLOCKCHAIN)
   // ----------------------------
   fastify.patch("/tournament/:id/status", async (req, reply) => {
     const { id } = req.params as any;
@@ -118,10 +122,36 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     }
 
     try {
+      // 1. Mise à jour locale (Base de données SQLite)
       await fastify.db.run(
         "UPDATE Tournament SET status = ? WHERE tournament_id = ?",
         [status, id]
       );
+
+      // 2. LOGIQUE BLOCKCHAIN - Uniquement si le tournoi est fini
+      if (status === "finished") {
+        // On récupère les infos du tournoi pour l'envoyer à la blockchain
+        const tournamentData = await fastify.db.get(
+            `SELECT name, WinnerName, 
+            (SELECT COUNT(*) FROM Player WHERE tournament_id = ?) as playerCount
+            FROM Tournament WHERE tournament_id = ?`,
+            [id, id]
+        );
+
+        if (tournamentData && tournamentData.WinnerName) {
+            // Appel au service Blockchain
+            // On ne met pas 'await' ici si on veut rendre la réponse rapide (non bloquant)
+            // Mais pour le debug, on peut laisser comme tel ou ajouter des logs.
+            blockchainService.recordTournament(
+                tournamentData.name,
+                tournamentData.WinnerName,
+                tournamentData.playerCount || 8 
+            );
+        } else {
+            console.warn("⚠️ Impossible d'enregistrer sur la blockchain: Vainqueur introuvable.");
+        }
+      }
+
       reply.send({ success: true });
     } catch (err) {
       reply.status(500).send({ success: false, error: (err as Error).message });
