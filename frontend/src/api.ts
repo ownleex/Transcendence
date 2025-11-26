@@ -46,6 +46,12 @@ export const sendFriendRequest = (username: string) =>
 export const acceptFriend = (requesterId: number) =>
   request("/user/friend/accept", { method: "PUT", body: JSON.stringify({ userId: requesterId}) });
 
+export const blockFriend = (userId: number) =>
+  request("/user/friend/block", {
+    method: "PUT",
+    body: JSON.stringify({ userId })
+  });
+
 export const getFriends = (userId: number) =>
     request(`/user/${userId}/friends`);
 
@@ -53,7 +59,9 @@ export const getIncomingRequests = (userId: number) =>
     request(`/user/${userId}/friend-requests`);
 
 export const getSentRequests = (userId: number) =>
-    request(`/user/${userId}/sent-requests`);
+      request(`/user/${userId}/sent-requests`, {
+      cache: "no-store"
+  });
 
 
 // --- STATS ---
