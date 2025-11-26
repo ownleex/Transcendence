@@ -84,7 +84,7 @@ setupGameWS(fastify);
 // -------------------------
 fastify.register(authRoutes);
 fastify.register(userRoutes, { prefix: "/api/user" });
-fastify.register(tournamentRoutes, { prefix: "/api/tournament" });
+fastify.register(tournamentRoutes, { prefix: "/api" });
 fastify.register(statsRoutes, { prefix: "/api/stats" });
 fastify.register(notificationRoutes, { prefix: "/api/notifications" });
 
