@@ -60,6 +60,7 @@ fastify.decorate(
     try {
       await request.jwtVerify();
     } catch {
+      console.log('[ERROR IN THERE]: fastify.decorate')
       reply.code(401).send({ error: "Unauthorized" });
     }
   }

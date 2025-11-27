@@ -81,7 +81,14 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
         io.to(room).emit("chat:message", msg);
       }
     );
+    // retourner les amis en ligne
+    socket.on("get:onlineFriends", (friendsIds: number[]) => {
+    if (!Array.isArray(friendsIds)) return;
+    const online = friendsIds.filter(id => onlineUsers.has(id));
 
+    // Send the list back only to the requester
+    socket.emit("onlineFriends", online);
+  });
     // --- Déconnexion ---
     socket.on("disconnect", () => {
       onlineUsers.delete(userId!);

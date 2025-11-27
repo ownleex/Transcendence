@@ -1,8 +1,9 @@
 import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
-import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend } from "./api";
+import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, getMatchHistory } from "./api";
 import { io } from "socket.io-client";
+
 
 window.addEventListener("DOMContentLoaded", () => {
     const app = document.getElementById("pongContent")!;
@@ -88,7 +89,64 @@ window.saveUserSession = function (user: any) {
     me = user;
     token = user.token;
 };
+/*
+// --------------------------------------------------------
+// Hybrid storage for user/session
+// --------------------------------------------------------
+let me = JSON.parse(localStorage.getItem(k("me")) || "{}");
+let token = localStorage.getItem(k("token"));
+const currentUserId = me?.id || null;
 
+window.saveUserSession = function (user: any) {
+    // Save per-browser-instance
+    localStorage.setItem(k("me"), JSON.stringify(user));
+    localStorage.setItem(k("token"), user.token);
+
+    // Also keep sessionStorage for fast access
+    sessionStorage.setItem("me", JSON.stringify(user));
+    sessionStorage.setItem("token", user.token);
+
+    me = user;
+    token = user.token;
+};
+
+window.clearUserSession = function () {
+    localStorage.removeItem(k("me"));
+    localStorage.removeItem(k("token"));
+
+    sessionStorage.removeItem("me");
+    sessionStorage.removeItem("token");
+
+    me = null;
+    token = null;
+
+    window.location.reload();
+};
+
+let me = JSON.parse(sessionStorage.getItem("me") || "{}");
+let token = sessionStorage.getItem("token");
+const currentUserId = me?.id || null;
+
+window.saveUserSession = function(user: any) {
+    sessionStorage.setItem("me", JSON.stringify(user));
+    sessionStorage.setItem("token", user.token);
+
+    me = user;
+    token = user.token;
+
+    loadAllFriendsData(); // reload friends for this session
+};
+
+window.clearUserSession = function() {
+    sessionStorage.removeItem("me");
+    sessionStorage.removeItem("token");
+
+    me = null;
+    token = null;
+
+    window.location.reload();
+};
+*/
 // Show friends panel
 window.showFriendsPanel = function () {
     document.getElementById("friends-panel")!.classList.remove("hidden");
@@ -128,7 +186,7 @@ async function loadFriendList() {
     const container = document.getElementById("friends-list")!;
     container.innerHTML = "Loading...";
 
-    const res = await getFriends(currentUserId);
+    const res = await getFriends(currentUserId);    
     if (!res.success) {
         container.innerHTML = "Failed to load friends";
         return;
@@ -172,7 +230,7 @@ function updateFriendStatus(userId: number, online: boolean) {
         const container = document.getElementById("friends-incoming")!;
         container.innerHTML = "Loading...";
 
-        const res = await getIncomingRequests(currentUserId);
+        const res = await getIncomingRequests(currentUserId);        
         if (!res.success) {
             container.innerHTML = "Failed to load requests";
             return;
@@ -243,7 +301,7 @@ async function loadSentRequests() {
     const container = document.getElementById("friends-sent")!;
     container.innerHTML = "Loading...";
 
-    const res = await getSentRequests(currentUserId);
+    const res = await getSentRequests(currentUserId);   
     if (!res.success) {
         container.innerHTML = "Failed to load sent requests";
         return;
@@ -299,5 +357,70 @@ friendForm.addEventListener("submit", async e => {
 // Load friends on page load
 // ----------------------------
 document.addEventListener("DOMContentLoaded", () => {
-    if (currentUserId) loadAllFriendsData();
+    if (currentUserId) loadAllFriendsData(); 
 });
+
+
+// ----------------------------
+// Show Matchs Panel
+// ----------------------------
+function openMatchesPanel(userId) {
+    document.getElementById("matches-panel").classList.remove("hidden");
+    showSection("matches-panel");
+    loadMatchHistory(userId);
+}
+
+// ----------------------------
+// Load Matchs History
+// ----------------------------
+async function loadMatchHistory(userId) {
+    try {
+        // Fetch the raw response
+        const response = await getMatchHistory(userId);
+        console.log("Raw match history response:", response);
+
+        // Determine where the matches array actually is
+        let matches: any[] = [];
+
+        if (Array.isArray(response)) {
+            // Case: API returns array directly
+            matches = response;
+        } else if (response.matches) {
+            // Case: API returns { success: true, matches: [...] }
+            matches = response.matches;
+        } else if (response.data?.matches) {
+            // Case: API returns { data: { matches: [...] } } 
+            matches = response.data.matches;
+        }
+
+        const container = document.getElementById("matches-list");
+
+        if (!matches.length) {
+            container.innerHTML = "<p class='text-gray-400'>No matches played yet.</p>";
+            return;
+        }
+
+        container.innerHTML = matches.map(m => `
+            <div class="p-3 border-b border-gray-600">
+                <div class="flex justify-between">
+                    <span>Vs <strong>${m.opponent_name}</strong></span>
+                    <span>${new Date(m.date).toLocaleString()}</span>
+                </div>
+                <div>
+                    Score: <span class="text-orange-400">${m.user_score}</span>
+                    -
+                    <span class="text-blue-400">${m.opponent_score}</span>
+                </div>
+                <div class="text-sm text-gray-400">
+                    Result: <strong class="${m.result === 'win' ? 'text-green-400' : m.result === 'loss' ? 'text-red-400' : 'text-yellow-400'}">
+                        ${m.result}
+                    </strong>
+                </div>
+            </div>
+        `).join("");
+    } catch (err: any) {
+        console.error("Failed to load match history:", err);
+        const container = document.getElementById("matches-list");
+        container.innerHTML = "<p class='text-red-400'>Failed to load matches. Please try again later.</p>";
+    }
+}

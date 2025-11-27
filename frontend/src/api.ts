@@ -1,5 +1,5 @@
 const API_BASE = "https://localhost:3000/api";
-
+/*
 async function request(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem("token");
   const headers = {
@@ -8,6 +8,26 @@ async function request(endpoint: string, options: RequestInit = {}) {
   };
 
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+  const data = await res.json();
+
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+*/
+async function request(endpoint: string, options: RequestInit = {}) {
+  const token = localStorage.getItem("token");
+  console.log("Token retrieved:", token);
+  const mergedHeaders = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),   // ← merge headers passed by the caller
+    ...(token ? { Authorization: `Bearer ${token}` } : {}), // ← ensure token is included
+  };
+
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: mergedHeaders,
+  });
+
   const data = await res.json();
 
   if (!res.ok) throw new Error(data.error || "Request failed");
@@ -35,14 +55,24 @@ export const verify2FA = (userId: number, token: string) =>
   });
 
 // --- FRIENDS ---
-//export const sendFriendRequest = (userId: number, friendId: number) =>
-//request("/user/friend-by-username", { method: "POST", body: JSON.stringify({ userId, friendId }) });
+/*
 export const sendFriendRequest = (username: string) =>
   request("/user/friend-by-username", {
     method: "POST",
     body: JSON.stringify({ username })
   });
-
+*/
+export const sendFriendRequest = (username: string) => {
+  const token = localStorage.getItem("jwt");
+  return request("/user/friend-by-username", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+    },
+    body: JSON.stringify({ username }),
+  });
+};
 export const acceptFriend = (requesterId: number) =>
   request("/user/friend/accept", { method: "PUT", body: JSON.stringify({ userId: requesterId}) });
 
@@ -62,6 +92,10 @@ export const getSentRequests = (userId: number) =>
       request(`/user/${userId}/sent-requests`, {
       cache: "no-store"
   });
+  
+// --- MATCHS ---
+export const getMatchHistory = (userId: number) =>
+    request(`/user/${userId}/match-history`);
 
 
 // --- STATS ---

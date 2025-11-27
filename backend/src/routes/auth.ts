@@ -236,6 +236,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     try {
       const authHeader = (req.headers as any).authorization || "";
       const jwt = authHeader.replace(/^Bearer\s+/i, "");
+      console.log('[ERROR IN THERE]: fastify./api/auth/revoke/github')
       if (!jwt) return reply.code(401).send({ error: "Unauthorized" });
 
       const payload = fastify.jwt.verify(jwt) as any;
@@ -286,6 +287,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     try {
       const authHeader = (req.headers as any).authorization || "";
       const jwt = authHeader.replace(/^Bearer\s+/i, "");
+       console.log('[ERROR IN THERE]: fastify./api/auth/revoke/42')
       if (!jwt) return reply.code(401).send({ error: "Unauthorized" });
 
       const payload = fastify.jwt.verify(jwt) as any;

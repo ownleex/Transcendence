@@ -105,6 +105,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
         try {
             await req.jwtVerify(); // checks Authorization header for a valid JWT
         } catch (err) {
+            console.log('[ERROR IN THERE]: fastify.decorate', err)
             reply.code(401).send({ success: false, error: "Unauthorized" });
         }
     });
@@ -247,14 +248,16 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
   // ----------------------------
   // Send friend request using username
   // ----------------------------
-      fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { username } = req.body as any;
         const userId = req.user.id;
 
         if (!username) return reply.code(400).send({ success: false, error: "Username required" });
 
         try {
-            const friend = await fastify.db.get("SELECT id FROM User WHERE username = ?", [username]);
+            const friend = await fastify.db.get("SELECT id FROM User WHERE username = ? OR email = ?",
+            [username, username]
+            );
             if (!friend) return reply.code(404).send({ success: false, error: "User not found" });
             if (friend.id === userId) return reply.code(400).send({ success: false, error: "Cannot add yourself" });
 
@@ -286,6 +289,60 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
             reply.code(500).send({ success: false, error: err.message });
         }
     });
+    /*
+      fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { username } = req.body as any;
+    const userId = req.user.id;
+
+    if (!username || !username.trim()) {
+        return reply.code(400).send({ success: false, error: "Username or email required" });
+    }
+
+    const input = username.trim().toLowerCase();
+
+    try {
+        // Case-insensitive search for username or email
+        const friend = await fastify.db.get(
+            "SELECT id, username, email FROM User WHERE LOWER(username) = ? OR LOWER(email) = ?",
+            [input, input]
+        );
+
+        if (!friend) return reply.code(404).send({ success: false, error: "User not found" });
+        if (friend.id === userId) return reply.code(400).send({ success: false, error: "Cannot add yourself" });
+
+        // Prevent duplicate requests
+        const existing = await fastify.db.get(
+            `SELECT 1 FROM Friend 
+             WHERE (user_id=? AND friend_id=?) 
+                OR (user_id=? AND friend_id=?)`,
+            [userId, friend.id, friend.id, userId]
+        );
+
+        if (existing) return reply.code(400).send({ success: false, error: "Friend request already sent" });
+
+        // Insert friend request
+        await fastify.db.run(
+            "INSERT INTO Friend (user_id, friend_id, status) VALUES (?, ?, 'pending')",
+            [userId, friend.id]
+        );
+
+        // Add notification for recipient
+        const sender = await fastify.db.get("SELECT username FROM User WHERE id = ?", [userId]);
+        const title = "New Friend Request";
+        const type = "friend_request";
+        const data = JSON.stringify({ fromUserId: userId, fromUsername: sender.username });
+
+        await fastify.db.run(
+            "INSERT INTO Notification (title, type, data, owner_id) VALUES (?, ?, ?, ?)",
+            [title, type, data, friend.id]
+        );
+
+        reply.send({ success: true, friendId: friend.id });
+    } catch (err: any) {
+        reply.code(500).send({ success: false, error: err.message });
+    }
+});
+*/
     //Sent requestS
     fastify.get("/:id/sent-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
@@ -402,6 +459,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
 // ----------------------------
 // Get Match History
 // ----------------------------
+/*
 fastify.get("/user/:id/matches", async (req, reply) => {
   const { id } = req.params as any;
   try {
@@ -414,6 +472,36 @@ fastify.get("/user/:id/matches", async (req, reply) => {
     reply.code(500).send({ success: false, error: err.message });
   }
 });
+*/
+fastify.get("/user/:id/match-history", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const { id } = req.params as any;
+
+        try {
+            const rows = await fastify.db.all(
+                `SELECT 
+                    mh.match_id,
+                    mh.user_id,
+                    u1.username AS user_name,
+                    mh.opponent_id,
+                    u2.username AS opponent_name,
+                    mh.user_score,
+                    mh.opponent_score,
+                    mh.user_elo,
+                    mh.date,
+                    mh.result
+                 FROM MatchHistory mh
+                 LEFT JOIN User u1 ON mh.user_id = u1.id
+                 LEFT JOIN User u2 ON mh.opponent_id = u2.id
+                 WHERE mh.user_id = ?
+                 ORDER BY mh.date DESC`,
+                [id]
+            );
+
+            reply.send({ success: true, matches: rows });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
     // ----------------------------
     // Match complete — update stats + ELO
     // ----------------------------
