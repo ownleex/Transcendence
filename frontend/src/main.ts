@@ -6,10 +6,30 @@ import { io } from "socket.io-client";
 
 window.addEventListener("DOMContentLoaded", () => {
     const app = document.getElementById("pongContent")!;
-    const gameContainer = document.getElementById("gameContainer")!;
+
+    // ---- Rebind des boutons de la Home après chaque render ----
+    function bindHomeButtons() {
+        const gameContainer = document.getElementById("gameContainer")!;
+        const playDuoBtn = document.getElementById("playDuoBtn");
+        const playQuadBtn = document.getElementById("playQuadBtn");
+        const viewTournamentBtn = document.getElementById("viewtournamentBtn");
+
+        playDuoBtn?.addEventListener("click", () => {
+            showGame(gameContainer, "duo");
+        });
+
+        playQuadBtn?.addEventListener("click", () => {
+            showGame(gameContainer, "quad");
+        });
+
+        // bouton "View Tournaments" dans les quick actions
+        viewTournamentBtn?.addEventListener("click", () => {
+            window.location.hash = "#tournament";
+        });
+    }
 
     // -------------------------
-    // Router for hash navigation
+    // Router pour la partie Pong
     // -------------------------
     function router() {
         const hash = window.location.hash;
@@ -17,6 +37,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
         if (!hash || hash === "#home") {
             showHome(app);
+            // très important : rebrancher les boutons après showHome
+            bindHomeButtons();
         } else if (hash === "#tournament") {
             showTournament(app);
         } else {
@@ -25,34 +47,25 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     // -------------------------
-    // Quick play buttons
-    // -------------------------
-    const playDuoBtn = document.getElementById("playDuoBtn");
-    const playQuadBtn = document.getElementById("playQuadBtn");
-
-    playDuoBtn?.addEventListener("click", () => {
-        showGame(gameContainer, "duo");
-    });
-
-    playQuadBtn?.addEventListener("click", () => {
-        showGame(gameContainer, "quad");
-    });
-
-    // -------------------------
-    // Top navbar buttons
+    // Boutons de la navbar du header Pong
     // -------------------------
     const homeBtn = document.getElementById("homeBtn");
-    const viewTournamentBtn = document.getElementById("viewtournamentBtn");
+    const tournamentNavBtn = document.getElementById("tournamentBtn");
 
-    homeBtn?.addEventListener("click", () => window.location.hash = "#home");
-    viewTournamentBtn?.addEventListener("click", () => window.location.hash = "#tournament");
+    homeBtn?.addEventListener("click", () => {
+        window.location.hash = "#home";
+    });
+
+    tournamentNavBtn?.addEventListener("click", () => {
+        window.location.hash = "#tournament";
+    });
 
     // -------------------------
-    // Event listeners for routing
+    // Routing
     // -------------------------
     window.addEventListener("hashchange", router);
 
-    // Initial render
+    // Premier render
     router();
 });
 
@@ -181,7 +194,7 @@ function updateFriendStatus(userId: number, online: boolean) {
 
             container.appendChild(div);
         });
-        
+
       // Attach event listeners
     container.querySelectorAll(".accept-btn").forEach(btn => {
         btn.addEventListener("click", async () => {

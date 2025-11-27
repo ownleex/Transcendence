@@ -5,9 +5,10 @@ import qrcode from "qrcode";
 import fs from "fs";
 import path from "path";
 import fetch from 'node-fetch';
-import { onlineUsers } from "./socket";
+// erreur : import { onlineUsers } from "./socket";
 export default async function userRoutes(fastify: FastifyInstance) {
-
+	const getOnlineUsers = () =>
+		(fastify as any).onlineUsers as Map<number, string> | undefined;
   // ----------------------------
   // Register new user
   // ----------------------------
@@ -185,7 +186,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     }
     async function getFullUserProfile(db: any, userId: number) {
         return db.get(
-            `SELECT 
+            `SELECT
             u.id,
             u.username,
             u.email,
@@ -211,7 +212,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const { id } = req.params as { id: string };
 
       try {
-          const user = await getFullUserProfile(fastify.db, Number(id));       
+          const user = await getFullUserProfile(fastify.db, Number(id));
           if (!user) return reply.code(404).send({ success: false, error: "User not found" });
           const avatar = normalizeAvatar(user.avatar);
           reply.send({ success: true, user: { ...user, avatar } });
@@ -226,7 +227,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
             const userId = req.user?.id;
         if (!userId) return reply.code(401).send({ success: false, error: 'Not authenticated' });
         try {
-            const user = await getFullUserProfile(fastify.db, Number(userId));        
+            const user = await getFullUserProfile(fastify.db, Number(userId));
             if (!user) return reply.code(404).send({ success: false, error: "User not found" });
 
             const avatar = normalizeAvatar(user.avatar);
@@ -259,7 +260,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
 
             // Prevent duplicate requests
             const existing = await fastify.db.get(
-                `SELECT 1 FROM Friend 
+                `SELECT 1 FROM Friend
                 WHERE (user_id=? AND friend_id=?)
                     OR (user_id=? AND friend_id=?)`,
                 [userId, friend.id, friend.id, userId]
@@ -314,7 +315,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
              WHERE f.friend_id = ? AND (f.status = 'pending' OR f.status = 'blocked')`,
                 [id]
             );
-            reply.send({ success: true, requests }); 
+            reply.send({ success: true, requests });
         } catch (err: any) {
             reply.code(500).send({ success: false, error: err.message });
         }
@@ -331,7 +332,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
             const friends = await fastify.db.all(
                 `SELECT u.id, u.username
                 FROM User u
-                JOIN Friend f 
+                JOIN Friend f
                     ON ((f.user_id = ? AND f.friend_id = u.id)
                     OR (f.friend_id = ? AND f.user_id = u.id))
                 WHERE f.status = 'accepted'`,
@@ -391,7 +392,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
              WHERE (user_id=? AND friend_id=?)
                 OR (user_id=? AND friend_id=?)`,
             [blockerId, userId, userId, blockerId]
-        );        
+        );
         reply.send({ success: true });
     } catch (err: any) {
         reply.code(500).send({ success: false, error: err.message });

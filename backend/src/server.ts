@@ -18,7 +18,7 @@ import statsRoutes from "./routes/stats";
 import notificationRoutes from "./routes/notification";
 import { setupGameWS } from "./ws/game";
 import authRoutes from "./routes/auth";
-import { setupSocket, onlineUsers } from "./routes/socket";
+import { setupSocket } from "./routes/socket";
 
 // -------------------------
 // Load environment variables
@@ -64,7 +64,6 @@ fastify.decorate(
     }
   }
 );
-fastify.decorate("onlineUsers", onlineUsers);
 
 // -------------------------
 // Register plugins

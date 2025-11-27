@@ -1,4 +1,6 @@
 // pong.ts
+import { io, Socket } from "socket.io-client";
+
 export type GameMode = "duo" | "quad";
 
 interface GameState {
@@ -10,16 +12,25 @@ interface GameState {
     ballY: number;
 }
 
+// --- Chat socket + état global match ---
+let chatSocket: Socket | null = null;
+let currentMatchId: number | null = null;
+
+/**
+ * Affiche et lance une partie (duo ou quad) + chat de match.
+ */
 export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     container.innerHTML = "Looking for match...";
 
-    const me = JSON.parse(localStorage.getItem("me") || "{}");
+     const storedMe =
+        sessionStorage.getItem("me") || localStorage.getItem("me") || "{}";
+    const me = JSON.parse(storedMe);
     const currentUserId = me.id;
+
     if (!currentUserId) {
         alert("User not logged in!");
         return;
     }
-
     // ---------------------------
     // Join queue
     // ---------------------------
@@ -46,6 +57,9 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         }
     }
 
+    currentMatchId = matchId;
+
+    // Nettoyage conteneur pour afficher le jeu + chat
     container.innerHTML = "";
 
     // ---------------------------
@@ -54,9 +68,71 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     const canvas = document.createElement("canvas");
     canvas.width = 600;
     canvas.height = 600;
+    canvas.style.border = "1px solid #ccc";
     container.appendChild(canvas);
     const ctx = canvas.getContext("2d")!;
 
+    // ---------------------------
+    // Chat UI (créé dynamiquement)
+    // ---------------------------
+    const chatWrapper = document.createElement("div");
+    chatWrapper.style.position = "absolute";
+    chatWrapper.style.right = "20px";
+    chatWrapper.style.bottom = "20px";
+    chatWrapper.style.width = "260px";
+    chatWrapper.style.maxHeight = "260px";
+    chatWrapper.style.background = "rgba(0,0,0,0.05)";
+    chatWrapper.style.borderRadius = "8px";
+    chatWrapper.style.padding = "8px";
+    chatWrapper.style.display = "flex";
+    chatWrapper.style.flexDirection = "column";
+    chatWrapper.style.fontSize = "12px";
+    chatWrapper.style.backdropFilter = "blur(4px)";
+
+    // On met le conteneur principal en relative pour que l'absolute du chat fonctionne bien
+    if (getComputedStyle(container).position === "static") {
+        container.style.position = "relative";
+    }
+
+    const messagesList = document.createElement("ul");
+    messagesList.id = "pong-chat-messages";
+    messagesList.style.listStyle = "none";
+    messagesList.style.margin = "0 0 8px 0";
+    messagesList.style.padding = "0";
+    messagesList.style.overflowY = "auto";
+    messagesList.style.maxHeight = "180px";
+
+    const form = document.createElement("form");
+    form.id = "pong-chat-form";
+    form.style.display = "flex";
+    form.style.gap = "4px";
+
+    const input = document.createElement("input");
+    input.id = "pong-chat-input";
+    input.type = "text";
+    input.placeholder = "Tape ton message...";
+    input.autocomplete = "off";
+    input.style.flex = "1";
+
+    const btn = document.createElement("button");
+    btn.type = "submit";
+    btn.textContent = "Envoyer";
+
+    form.appendChild(input);
+    form.appendChild(btn);
+    chatWrapper.appendChild(messagesList);
+    chatWrapper.appendChild(form);
+    container.appendChild(chatWrapper);
+
+    // ---------------------------
+    // Init chat de match
+    // ---------------------------
+    initMatchChat(matchId, messagesList);
+    setupChatForm(form, input);
+
+    // ---------------------------
+    // Constantes jeu
+    // ---------------------------
     const PADDLE_LENGTH = 100;
     const PADDLE_SPEED = 5;
     const BALL_RADIUS = 10;
@@ -77,11 +153,14 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     // Key handling
     // ---------------------------
     const keys = new Set<string>();
-    window.addEventListener("keydown", e => keys.add(e.key));
-    window.addEventListener("keyup", e => keys.delete(e.key));
+    const keydownHandler = (e: KeyboardEvent) => keys.add(e.key);
+    const keyupHandler = (e: KeyboardEvent) => keys.delete(e.key);
+
+    window.addEventListener("keydown", keydownHandler);
+    window.addEventListener("keyup", keyupHandler);
 
     // ---------------------------
-    // WebSocket connection
+    // WebSocket connection (jeu)
     // ---------------------------
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${protocol}://${location.host}/game?matchId=${matchId}&userId=${currentUserId}`);
@@ -114,7 +193,11 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     };
 
     ws.onerror = (err) => console.error("WebSocket error:", err);
-    ws.onclose = () => console.log("WebSocket closed");
+    ws.onclose = () => {
+        console.log("WebSocket closed");
+        window.removeEventListener("keydown", keydownHandler);
+        window.removeEventListener("keyup", keyupHandler);
+    };
 
     // ---------------------------
     // Paddle input processing
@@ -143,7 +226,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         }
     }
 
-    setInterval(sendPaddle, 1000 / 60);
+    const paddleInterval = setInterval(sendPaddle, 1000 / 60);
 
     // ---------------------------
     // Draw loop
@@ -175,4 +258,68 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     }
 
     draw();
+
+    // Petite sécurité si jamais tu quittes la page / détruis le container
+    const observer = new MutationObserver(() => {
+        if (!document.body.contains(container)) {
+            clearInterval(paddleInterval);
+            ws.close();
+            if (chatSocket) {
+                chatSocket.disconnect();
+                chatSocket = null;
+            }
+            observer.disconnect();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+/**
+ * Initialise la connexion Socket.io pour le chat du match
+ */
+function initMatchChat(matchId: number, messagesList: HTMLUListElement) {
+    // On évite les doublons
+    if (chatSocket) {
+        chatSocket.disconnect();
+        chatSocket = null;
+    }
+
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (!token) {
+        console.warn("No token for chat socket");
+        return;
+    }
+
+    chatSocket = io(window.location.origin, {
+        transports: ["websocket"],
+        auth: { token },
+    });
+
+    chatSocket.emit("joinMatchChat", matchId);
+
+    chatSocket.on("chat:message", (msg: { from: number; text: string; at: string }) => {
+        const li = document.createElement("li");
+        const time = new Date(msg.at).toLocaleTimeString();
+        li.textContent = `[${time}] #${msg.from}: ${msg.text}`;
+        messagesList.appendChild(li);
+        messagesList.scrollTop = messagesList.scrollHeight;
+    });
+}
+
+/**
+ * Gère l'envoi de messages depuis le formulaire de chat
+ */
+function setupChatForm(form: HTMLFormElement, input: HTMLInputElement) {
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (!text || !chatSocket || currentMatchId == null) return;
+
+        chatSocket.emit("chat:message", {
+            matchId: currentMatchId,
+            text,
+        });
+
+        input.value = "";
+    });
 }
