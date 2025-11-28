@@ -74,7 +74,7 @@ window.addEventListener("DOMContentLoaded", () => {
 // Hybrid storage for user/session
 // -------------------------
 let me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
-let token = sessionStorage.getItem("token") || localStorage.getItem("token");
+let token = sessionStorage.getItem("token") || localStorage.getItem("jwt");
 const currentUserId = me.id;
 
 // Store user in sessionStorage on login
@@ -84,7 +84,7 @@ window.saveUserSession = function (user: any) {
 
     // Optional: also persist in localStorage for regular sessions
     localStorage.setItem("me", JSON.stringify(user));
-    localStorage.setItem("token", user.token);
+    localStorage.setItem("jwt", user.token);
 
     me = user;
     token = user.token;
@@ -307,63 +307,113 @@ document.addEventListener("DOMContentLoaded", () => {
 // ----------------------------
 // Show Matchs Panel
 // ----------------------------
+/*
 function openMatchesPanel(userId) {
     document.getElementById("matches-panel").classList.remove("hidden");
     showSection("matches-panel");
-    loadMatchHistory(userId);
+    //loadMatchHistory(userId);
+    loadMatchHistory(userId ?? me.id);
+    console.log("Calling loadMatchHistory with userId:", userId ?? me.id);
 }
+*/
+// Show friends panel
+/*
+function openMatchesPanel(userId?: number) {
+    const uid = userId ?? me.id;
+    if (!uid) {
+        console.error("No valid user ID to load match history");
+        return;
+    }
+
+    document.getElementById("matches-panel")!.classList.remove("hidden");
+    showSection("matches-panel");
+    loadMatchHistory(uid);
+    console.log("Calling loadMatchHistory with userId:", uid);
+}
+*/
 
 // ----------------------------
-// Load Matchs History
+// Show Matches Panel
 // ----------------------------
-async function loadMatchHistory(userId) {
+window.showMatchesPanel = function (userId?: number) {
+    const id = userId ?? currentUserId;
+
+    if (!id) {
+        console.error("No valid user ID to show match history");
+        const container = document.getElementById("matches-list")!;
+        container.innerHTML = "<p class='text-red-400'>Cannot load match history: user not logged in.</p>";
+        return;
+    }
+
+    document.getElementById("matches-panel")!.classList.remove("hidden");
+    loadMatchHistory(id);
+};
+
+// ----------------------------
+// Load Match History
+// ----------------------------
+async function loadMatchHistory(userId: number) {
+    const container = document.getElementById("matches-list")!;
+    container.innerHTML = "Loading match history...";
+
+    function formatMatchDate(dateStr: string) {
+        const parts = dateStr.split("-");
+        if (parts.length === 3) {
+            const [day, month, year] = parts;
+            return new Date(`20${year}-${month}-${day}`).toLocaleString();
+        }
+        return new Date(dateStr).toLocaleString();
+    }
+
     try {
-        // Fetch the raw response
+        const token = localStorage.getItem('jwt') || sessionStorage.getItem('token');
+        if (!token) {
+            container.innerHTML = "<p class='text-red-400'>No JWT token found. Please log in again.</p>";
+            return;
+        }
+
         const response = await getMatchHistory(userId);
         console.log("Raw match history response:", response);
 
-        // Determine where the matches array actually is
-        let matches: any[] = [];
-
-        if (Array.isArray(response)) {
-            // Case: API returns array directly
-            matches = response;
-        } else if (response.matches) {
-            // Case: API returns { success: true, matches: [...] }
-            matches = response.matches;
-        } else if (response.data?.matches) {
-            // Case: API returns { data: { matches: [...] } } 
-            matches = response.data.matches;
-        }
-
-        const container = document.getElementById("matches-list");
+        const matches = response?.matches || [];
 
         if (!matches.length) {
             container.innerHTML = "<p class='text-gray-400'>No matches played yet.</p>";
             return;
         }
 
-        container.innerHTML = matches.map(m => `
-            <div class="p-3 border-b border-gray-600">
-                <div class="flex justify-between">
-                    <span>Vs <strong>${m.opponent_name}</strong></span>
-                    <span>${new Date(m.date).toLocaleString()}</span>
+        container.innerHTML = matches.map(m => {
+            const isUser = m.user_id == userId;
+            const opponentName = isUser ? m.opponent_name : m.user_name;
+            const myScore = isUser ? m.user_score : m.opponent_score;
+            const oppScore = isUser ? m.opponent_score : m.user_score;
+
+            return `
+                <div class="p-3 border-b border-gray-600">
+                    <div class="flex justify-between">
+                        <span>Vs <strong>${opponentName}</strong></span>
+                        <span>${formatMatchDate(m.date)}</span>
+                    </div>
+                    <div>
+                        Score: <span class="text-orange-400">${myScore}</span>
+                        - 
+                        <span class="text-blue-400">${oppScore}</span>
+                    </div>
+                    <div class="text-sm text-gray-400">
+                        Result: <strong class="${m.result === 'win' ? 'text-green-400' :
+                    m.result === 'loss' ? 'text-red-400' : 'text-yellow-400'}">
+                            ${m.result}
+                        </strong>
+                    </div>
                 </div>
-                <div>
-                    Score: <span class="text-orange-400">${m.user_score}</span>
-                    -
-                    <span class="text-blue-400">${m.opponent_score}</span>
-                </div>
-                <div class="text-sm text-gray-400">
-                    Result: <strong class="${m.result === 'win' ? 'text-green-400' : m.result === 'loss' ? 'text-red-400' : 'text-yellow-400'}">
-                        ${m.result}
-                    </strong>
-                </div>
-            </div>
-        `).join("");
+            `;
+        }).join("");
+
     } catch (err: any) {
         console.error("Failed to load match history:", err);
-        const container = document.getElementById("matches-list");
         container.innerHTML = "<p class='text-red-400'>Failed to load matches. Please try again later.</p>";
     }
 }
+
+
+

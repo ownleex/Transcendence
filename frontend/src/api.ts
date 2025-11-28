@@ -1,12 +1,13 @@
 const API_BASE = "https://localhost:3000/api";
 
 async function request(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("jwt");
+   //const token = localStorage.getItem("jwt");
+   const token = localStorage.getItem("jwt") || localStorage.getItem("token");
   console.log("Token retrieved:", token);
   const mergedHeaders = {
     "Content-Type": "application/json",
-    ...(options.headers || {}),   // ← merge headers passed by the caller
-    ...(token ? { Authorization: `Bearer ${token}` } : {}), // ← ensure token is included
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
   };
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -27,7 +28,7 @@ export const register = (user: { username: string; email: string; password: stri
 export const login = (user: { username: string; password: string; token?: string }) =>
   request("/auth/signin", { method: "POST", body: JSON.stringify(user) })
     .then((data) => {
-      if (data.token) localStorage.setItem("token", data.token);
+      if (data.token) localStorage.setItem("jwt", data.token);
       return data;
     });
 
@@ -73,9 +74,18 @@ export const getSentRequests = (userId: number) =>
   });
   
 // --- MATCHS ---
-export const getMatchHistory = (userId: number) =>
-    request(`/user/${userId}/match-history`);
+export const getMatchHistory = async (userId: number) => {
+    const token = localStorage.getItem("jwt") || sessionStorage.getItem("token");
+    if (!token) throw new Error("No JWT token available for request");
 
+    return request(`/user/${userId}/match-history`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+        },
+    });
+};
 
 // --- STATS ---
 export const getUserProfile = (userId: number) =>

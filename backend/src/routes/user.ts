@@ -404,9 +404,6 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     }
 });
 
-// ----------------------------
-// Get Match History
-// ----------------------------
 /*
 fastify.get("/user/:id/matches", async (req, reply) => {
   const { id } = req.params as any;
@@ -420,7 +417,7 @@ fastify.get("/user/:id/matches", async (req, reply) => {
     reply.code(500).send({ success: false, error: err.message });
   }
 });
-*/
+
 fastify.get("/user/:id/match-history", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
 
@@ -449,7 +446,45 @@ fastify.get("/user/:id/match-history", { preHandler: [fastify.authenticate] }, a
         } catch (err: any) {
             reply.code(500).send({ success: false, error: err.message });
         }
-    });
+});
+    */
+     // ----------------------------
+    // Get Match History
+    // ----------------------------
+    fastify.get("/:id/match-history",
+        { preHandler: [fastify.authenticate] },
+        async (req, reply) => {
+
+            const { id } = req.params as any;
+            fastify.log.info({ id }, "Fetching match history"); 
+            try {
+                const rows = await fastify.db.all(
+                    `SELECT 
+                        mh.match_id,
+                        mh.user_id,
+                        u1.username AS user_name,
+                        mh.opponent_id,
+                        u2.username AS opponent_name,
+                        mh.user_score,
+                        mh.opponent_score,
+                        mh.user_elo,
+                        mh.date,
+                        mh.result
+                     FROM MatchHistory mh
+                     LEFT JOIN User u1 ON mh.user_id = u1.id
+                     LEFT JOIN User u2 ON mh.opponent_id = u2.id
+                     WHERE mh.user_id = ? OR mh.opponent_id = ?
+                     ORDER BY mh.date DESC`,
+                    [id, id]
+                );
+                fastify.log.info({ id, rows }, "MatchHistory query result");
+                reply.send({ success: true, matches: rows });
+
+            } catch (err: any) {
+                reply.code(500).send({ success: false, error: err.message });
+            }
+        });
+
     // ----------------------------
     // Match complete — update stats + ELO
     // ----------------------------
