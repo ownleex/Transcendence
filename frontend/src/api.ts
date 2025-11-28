@@ -1,21 +1,7 @@
 const API_BASE = "https://localhost:3000/api";
-/*
-async function request(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
 
-  const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
-  const data = await res.json();
-
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
-}
-*/
 async function request(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("jwt");
   console.log("Token retrieved:", token);
   const mergedHeaders = {
     "Content-Type": "application/json",
@@ -55,13 +41,6 @@ export const verify2FA = (userId: number, token: string) =>
   });
 
 // --- FRIENDS ---
-/*
-export const sendFriendRequest = (username: string) =>
-  request("/user/friend-by-username", {
-    method: "POST",
-    body: JSON.stringify({ username })
-  });
-*/
 export const sendFriendRequest = (username: string) => {
   const token = localStorage.getItem("jwt");
   return request("/user/friend-by-username", {

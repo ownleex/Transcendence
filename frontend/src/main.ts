@@ -89,64 +89,7 @@ window.saveUserSession = function (user: any) {
     me = user;
     token = user.token;
 };
-/*
-// --------------------------------------------------------
-// Hybrid storage for user/session
-// --------------------------------------------------------
-let me = JSON.parse(localStorage.getItem(k("me")) || "{}");
-let token = localStorage.getItem(k("token"));
-const currentUserId = me?.id || null;
 
-window.saveUserSession = function (user: any) {
-    // Save per-browser-instance
-    localStorage.setItem(k("me"), JSON.stringify(user));
-    localStorage.setItem(k("token"), user.token);
-
-    // Also keep sessionStorage for fast access
-    sessionStorage.setItem("me", JSON.stringify(user));
-    sessionStorage.setItem("token", user.token);
-
-    me = user;
-    token = user.token;
-};
-
-window.clearUserSession = function () {
-    localStorage.removeItem(k("me"));
-    localStorage.removeItem(k("token"));
-
-    sessionStorage.removeItem("me");
-    sessionStorage.removeItem("token");
-
-    me = null;
-    token = null;
-
-    window.location.reload();
-};
-
-let me = JSON.parse(sessionStorage.getItem("me") || "{}");
-let token = sessionStorage.getItem("token");
-const currentUserId = me?.id || null;
-
-window.saveUserSession = function(user: any) {
-    sessionStorage.setItem("me", JSON.stringify(user));
-    sessionStorage.setItem("token", user.token);
-
-    me = user;
-    token = user.token;
-
-    loadAllFriendsData(); // reload friends for this session
-};
-
-window.clearUserSession = function() {
-    sessionStorage.removeItem("me");
-    sessionStorage.removeItem("token");
-
-    me = null;
-    token = null;
-
-    window.location.reload();
-};
-*/
 // Show friends panel
 window.showFriendsPanel = function () {
     document.getElementById("friends-panel")!.classList.remove("hidden");
@@ -160,7 +103,7 @@ let socket: ReturnType<typeof io> | null = null;
 
 function initSocket(friendsIds: number[]) {
     if (!socket) {
-        const token = localStorage.getItem("token");
+        const token = localStorage.getItem("jwt");
         if (!token) return;
 
         socket = io("https://localhost:3000", { auth: { token } });

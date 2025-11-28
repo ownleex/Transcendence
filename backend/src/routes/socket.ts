@@ -43,6 +43,7 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
 
       const decoded = await (fastify as any).jwt.verify(token);
       userId = decoded.id || decoded.userId || decoded.sub;
+      
       if (!userId) {
         socket.disconnect(true);
         return;

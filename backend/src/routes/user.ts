@@ -5,13 +5,14 @@ import qrcode from "qrcode";
 import fs from "fs";
 import path from "path";
 import fetch from 'node-fetch';
-// erreur : import { onlineUsers } from "./socket";
+
 export default async function userRoutes(fastify: FastifyInstance) {
 	const getOnlineUsers = () =>
-		(fastify as any).onlineUsers as Map<number, string> | undefined;
-  // ----------------------------
-  // Register new user
-  // ----------------------------
+        (fastify as any).onlineUsers as Map<number, string> | undefined;
+
+// ----------------------------
+// Register new user
+// ----------------------------
   fastify.post("/register", async (req: FastifyRequest<{ Body: { username: string; email: string; password: string } }>, reply: FastifyReply) => {
     const { username, email, password } = req.body;
 
@@ -289,60 +290,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
             reply.code(500).send({ success: false, error: err.message });
         }
     });
-    /*
-      fastify.post("/friend-by-username", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-    const { username } = req.body as any;
-    const userId = req.user.id;
 
-    if (!username || !username.trim()) {
-        return reply.code(400).send({ success: false, error: "Username or email required" });
-    }
-
-    const input = username.trim().toLowerCase();
-
-    try {
-        // Case-insensitive search for username or email
-        const friend = await fastify.db.get(
-            "SELECT id, username, email FROM User WHERE LOWER(username) = ? OR LOWER(email) = ?",
-            [input, input]
-        );
-
-        if (!friend) return reply.code(404).send({ success: false, error: "User not found" });
-        if (friend.id === userId) return reply.code(400).send({ success: false, error: "Cannot add yourself" });
-
-        // Prevent duplicate requests
-        const existing = await fastify.db.get(
-            `SELECT 1 FROM Friend 
-             WHERE (user_id=? AND friend_id=?) 
-                OR (user_id=? AND friend_id=?)`,
-            [userId, friend.id, friend.id, userId]
-        );
-
-        if (existing) return reply.code(400).send({ success: false, error: "Friend request already sent" });
-
-        // Insert friend request
-        await fastify.db.run(
-            "INSERT INTO Friend (user_id, friend_id, status) VALUES (?, ?, 'pending')",
-            [userId, friend.id]
-        );
-
-        // Add notification for recipient
-        const sender = await fastify.db.get("SELECT username FROM User WHERE id = ?", [userId]);
-        const title = "New Friend Request";
-        const type = "friend_request";
-        const data = JSON.stringify({ fromUserId: userId, fromUsername: sender.username });
-
-        await fastify.db.run(
-            "INSERT INTO Notification (title, type, data, owner_id) VALUES (?, ?, ?, ?)",
-            [title, type, data, friend.id]
-        );
-
-        reply.send({ success: true, friendId: friend.id });
-    } catch (err: any) {
-        reply.code(500).send({ success: false, error: err.message });
-    }
-});
-*/
     //Sent requestS
     fastify.get("/:id/sent-requests", { preHandler: [fastify.authenticate] }, async (req, reply) => {
         const { id } = req.params as any;
