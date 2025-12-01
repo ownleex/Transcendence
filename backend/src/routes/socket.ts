@@ -29,13 +29,13 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
     let userId: number | null = null;
 
     // --- Auth via JWT ---
-    try {
+      try {
+      
       const token =
         (socket.handshake.auth && (socket.handshake.auth as any).token) ||
         (typeof socket.handshake.headers.authorization === "string"
           ? socket.handshake.headers.authorization.replace("Bearer ", "")
-          : null);
-
+          : null);      
       if (!token) {
         socket.disconnect(true);
         return;
@@ -66,7 +66,7 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
       socket.join(room);
       fastify.log.info({ userId, matchId }, "Joined match chat");
     });
-
+    
     socket.on(
       "chat:message",
       (payload: { matchId: number; text: string }) => {
@@ -82,6 +82,25 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
         io.to(room).emit("chat:message", msg);
       }
     );
+    /*
+    socket.on("chat:message", (payload: { matchId: number; text: any }) => {
+        if (!payload || typeof payload.matchId !== "number") return;
+        if (!payload.text || typeof payload.text !== "string") {
+            fastify.log.warn({ payload }, "Invalid chat message payload");
+            return;
+        }
+
+        const room = `match_${payload.matchId}`;
+        const msg: ChatMessage = {
+            from: userId!,
+            text: payload.text.trim().slice(0, 500),
+            at: new Date().toISOString(),
+        };
+
+        io.to(room).emit("chat:message", msg);
+        fastify.log.info({ userId, room, msg }, "Chat message sent");
+    });
+    */
     // retourner les amis en ligne
     socket.on("get:onlineFriends", (friendsIds: number[]) => {
     if (!Array.isArray(friendsIds)) return;

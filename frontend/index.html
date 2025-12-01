@@ -88,7 +88,7 @@
                 // 🟢 42 Intra (our /api/auth/signin path or containing "intra.42.fr")
                 else if (/auth\/signin/i.test(href.pathname) || /intra\.42\.fr/i.test(href.href)) {
                     href.searchParams.set('prompt', 'login');
-                    href.searchParams.set('access_type', 'offline'); // harmless, standard param
+                    href.searchParams.set('access_type', 'offline');
                 }
                 // fallback for others
                 else {
@@ -573,10 +573,10 @@
             function getJwtFromStorage() {
                 return localStorage.getItem('jwt') || sessionStorage.getItem('jwt') || localStorage.getItem('token') || sessionStorage.getItem('token') || null;
             }
-            // 1) Try URL query first (this should be early and quick)
+            //Try URL query first (this should be early and quick)
             const urlToken = getJwtFromUrl();
             if (urlToken && window.location.pathname !== '/reset-password') {
-                console.log('[auth] found token in URL:', urlToken.slice(0, 6) + '...'); // don't print full token
+                console.log('[auth] found token in URL:', urlToken.slice(0, 6) + '...');
                 // store canonical location
                 localStorage.setItem('jwt', urlToken);
                 // clean the URL
@@ -585,20 +585,19 @@
                 showPongSection();
                 return;
             }
-            // 2) Try storage (landing page may have written it already)
+            //Try storage (landing page may have written it already)
             const existing = getJwtFromStorage();
             if (existing) {
                 console.log('[auth] found token in storage:', existing.slice(0, 6) + '...');
                 showPongSection();
                 return;
             }
-            // 3) If opened as an OAuth popup landing that used window.opener.postMessage,
+            //If opened as an OAuth popup landing that used window.opener.postMessage,
             // listen for a message for a short period.
             let messageHandled = false;
             function messageListener(ev) {
                 try {
-                    // adapt origin check as needed; accept any for debug, then lock down
-                    // if (ev.origin !== window.location.origin) return;
+                    // adapt origin check as needed; accept any for debug, then lock down               
                     const data = ev.data;
                     if (data && (data.token || data.jwt)) {
                         const t = data.token || data.jwt;
@@ -672,7 +671,7 @@
                 e.preventDefault();
 
                 try {
-                    // 1) Optionally call server to invalidate token (safe if you implement revoke endpoint)
+                    // Optionally call server to invalidate token (safe if you implement revoke endpoint)
                     const token = localStorage.getItem('token') || sessionStorage.getItem('token') || sessionStorage.getItem('jwt');
                     if (token) {
                         // best-effort: don't crash if server returns non-200
@@ -691,22 +690,19 @@
                         }
                     }
 
-                    // 2) Clear all known storage keys (backwards compat)
+                    // Clear all known storage keys (backwards compat)
                     localStorage.removeItem('token');
                     localStorage.removeItem('jwt');
                     sessionStorage.removeItem('token');
                     sessionStorage.removeItem('jwt');
 
-                    // 3) Optionally clear other app state (unregister timers, sockets, etc.)
-                    // e.g. if you open a WebSocket, close it here: socket?.close();
+                    // Optionally clear other app state (unregister timers, sockets, etc.)
+                    // e.g. if open a WebSocket, close it here: socket?.close();
 
-                    // 4) Force UI back to sign-in: either reload or call showSigninSection()
-                    // Use reload so every module re-checks token from canonical storage
-                    window.location.href = '/frontend/index.html'; // or just window.location.reload();
+                    window.location.href = '/frontend/index.html';
 
                 } catch (err) {
-                    console.error('Logout error:', err);
-                    // fallback UI change
+                    console.error('Logout error:', err);                
                     showSigninSection?.();
                 }
             });
@@ -988,6 +984,7 @@
         })();
     </script>
     <script>
+
         async function loadProfile() {
             const me = JSON.parse(localStorage.getItem("me") || "{}");
             const token = localStorage.getItem("jwt");
@@ -1030,8 +1027,7 @@
                 loadProfile();
             }
         });
-    </script>    
-    <!-- Scripts at the end for Vite-friendly imports -->
+    </script>  
     <script type="module" src="./src/alias.ts"></script>
     <script type="module" src="./src/main.ts"></script>
 </body>

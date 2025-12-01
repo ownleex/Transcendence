@@ -1,4 +1,6 @@
+
 // backend/src/services/blockchain.ts
+
 import { ethers } from "ethers";
 import dotenv from "dotenv";
 
@@ -64,3 +66,25 @@ export class BlockchainService {
 }
 
 export const blockchainService = new BlockchainService();
+
+// backend/src/services/blockchain.ts
+/*
+export class BlockchainService {
+    constructor() {
+        console.log("⚠️ Blockchain disabled — running in no-op mode");
+    }
+
+    async recordTournament(
+        name: string,
+        winnerName: string,
+        participantsCount: number
+    ) {
+        console.log(
+            `⚠️ Blockchain disabled — pretending to record tournament '${name}'`
+        );
+        return null; // or return a fake hash if needed
+    }
+}
+
+export const blockchainService = new BlockchainService();
+*/

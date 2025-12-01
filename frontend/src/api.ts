@@ -28,7 +28,11 @@ export const register = (user: { username: string; email: string; password: stri
 export const login = (user: { username: string; password: string; token?: string }) =>
   request("/auth/signin", { method: "POST", body: JSON.stringify(user) })
     .then((data) => {
-      if (data.token) localStorage.setItem("jwt", data.token);
+        //if (data.token) localStorage.setItem("token", data.token);
+        if (data.token) {
+            localStorage.setItem("jwt", data.token);
+            sessionStorage.setItem("token", data.token); // optional
+        }
       return data;
     });
 
@@ -74,18 +78,11 @@ export const getSentRequests = (userId: number) =>
   });
   
 // --- MATCHS ---
-export const getMatchHistory = async (userId: number) => {
-    const token = localStorage.getItem("jwt") || sessionStorage.getItem("token");
-    if (!token) throw new Error("No JWT token available for request");
 
-    return request(`/user/${userId}/match-history`, {
-        method: "GET",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-        },
-    });
-};
+export const fetchUserMe = () => request("/user/me");
+
+export const getMatchHistory = (userId: number) =>
+    request(`/user/${userId}/match-history`);
 
 // --- STATS ---
 export const getUserProfile = (userId: number) =>

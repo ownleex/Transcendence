@@ -76,8 +76,10 @@ fastify.register(fastifyMultipart);
 // -------------------------
 // WebSocket Setup (combined)
 // -------------------------
-setupSocket(fastify);
-setupGameWS(fastify);
+//setupSocket(fastify);
+//setupGameWS(fastify);
+fastify.register(setupSocket);
+fastify.register(setupGameWS);
 
 // -------------------------
 // API Routes
