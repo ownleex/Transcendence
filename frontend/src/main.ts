@@ -5,25 +5,48 @@ import { showTournament } from "./tournament";
 import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, getMatchHistory, fetchUserMe } from "./api";
 import { io } from "socket.io-client";
 
+// -------------------------
+// Global state
+// -------------------------
+let me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
+let token = sessionStorage.getItem("token") || localStorage.getItem("jwt");
+
+console.log("[INIT] Loaded user from storage:", me);
+console.log("[INIT] Loaded token:", token);
+
+(window as any).currentUserId = me?.id ?? null;
+
+// -------------------------
+// Ensure current user (fresh /me every time)
+// -------------------------
+async function ensureCurrentUser() {
+    try {
+        const res = await fetchUserMe();
+        if (res.success) {
+            me = res.user;
+            window.currentUserId = me.id;
+
+            sessionStorage.setItem("me", JSON.stringify(me));
+            console.log("[ensureCurrentUser] Updated user:", me);
+        } else {
+            console.warn("[ensureCurrentUser] Failed to fetch /me:", res.error);
+        }
+    } catch (err) {
+        console.error("[ensureCurrentUser] Error fetching user:", err);
+    }
+}
+// ------------------------------
+// DOMContentLoaded
+// ------------------------------
 window.addEventListener("DOMContentLoaded", async () => {
     const app = document.getElementById("pongContent")!;
-    async function ensureCurrentUser() {
-        if (!me?.id) {
-            try {
-                const res = await fetchUserMe();
-                if (res.success) {
-                    me = res.user;
-                    window.currentUserId = me.id;
-                    sessionStorage.setItem("me", JSON.stringify(me));
-                } else {
-                    console.warn("Failed to fetch /me:", res.error);
-                }
-            } catch (err) {
-                console.error("Error fetching current user:", err);
-            }
-        }
-    }
-    // Now run router AFTER user is loaded
+     await ensureCurrentUser();
+
+    console.log("[DOMContentLoaded] User ready:", me);
+
+    // activate hash router
+    window.addEventListener("hashchange", router);
+
     await router();
 
     // ---- Rebind des boutons de la Home après chaque render ----
@@ -46,48 +69,6 @@ window.addEventListener("DOMContentLoaded", async () => {
             window.location.hash = "#tournament";
         });
     }
-    /*
-    // -------------------------
-    // Router pour la partie Pong
-    // -------------------------
-    function router() {
-        const hash = window.location.hash;
-        app.innerHTML = "";
-
-        if (!hash || hash === "#home") {
-            showHome(app);
-            // très important : rebrancher les boutons après showHome
-            bindHomeButtons();
-        } else if (hash === "#tournament") {
-            showTournament(app);
-        } else {
-            app.innerHTML = `<p class="text-red-500">Page not found</p>`;
-        }
-    }
-
-    // -------------------------
-    // Boutons de la navbar du header Pong
-    // -------------------------
-    const homeBtn = document.getElementById("homeBtn");
-    const tournamentNavBtn = document.getElementById("tournamentBtn");
-
-    homeBtn?.addEventListener("click", () => {
-        window.location.hash = "#home";
-    });
-
-    tournamentNavBtn?.addEventListener("click", () => {
-        window.location.hash = "#tournament";
-    });
-
-    // -------------------------
-    // Routing
-    // -------------------------
-    window.addEventListener("hashchange", router);
-
-    // Premier render
-    router();
-});
-*/
 
     // -------------------------
     // Updated Router (supports friends + matches)
@@ -136,62 +117,19 @@ window.addEventListener("DOMContentLoaded", async () => {
     // -------------------------
     // Navbar buttons
     // -------------------------
-    const homeBtn = document.getElementById("homeBtn");
-    const tournamentNavBtn = document.getElementById("tournamentBtn");
+  document.getElementById("homeBtn")?.addEventListener("click", () => (window.location.hash = "#home"));
+    document.getElementById("tournamentBtn")?.addEventListener("click", () => (window.location.hash = "#tournament"));
 
-    homeBtn?.addEventListener("click", () => (window.location.hash = "#home"));
-    tournamentNavBtn?.addEventListener("click", () => (window.location.hash = "#tournament"));
+    // Dropdown buttons
+    document.querySelector('#userMenuDropdown [data-target="profile-panel"]')
+        ?.addEventListener("click", () => (window.location.hash = "#profile"));
 
-    // For dropdown: profile + matches + friends
-    const profileBtn = document.querySelector('#userMenuDropdown [data-target="profile-panel"]');
-    profileBtn?.addEventListener("click", () => {
-        window.location.hash = "#profile";
-    });
-    const matchesBtn = document.querySelector('#userMenuDropdown [data-target="matches-panel"]');
-    matchesBtn?.addEventListener("click", () => {
-        window.location.hash = "#matches";
-    });
+    document.querySelector('#userMenuDropdown [data-target="matches-panel"]')
+        ?.addEventListener("click", () => (window.location.hash = "#matches"));
 
-    const friendsBtn = document.querySelector('#userMenuDropdown [data-target="friends-panel"]');
-    friendsBtn?.addEventListener("click", () => {
-        window.location.hash = "#friends";
-    });
-
-    // Router activation
-    window.addEventListener("hashchange", router);
-
-    //router(); // initial render
+    document.querySelector('#userMenuDropdown [data-target="friends-panel"]')
+        ?.addEventListener("click", () => (window.location.hash = "#friends"));
 });
-
-// -------------------------
-// Hybrid storage for user/session
-// -------------------------
-let me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
-let token = sessionStorage.getItem("token") || localStorage.getItem("jwt");
-console.log("[INIT] Loaded user:", me);
-console.log("[INIT] Loaded token:", token);
-const currentUserId = me.id;
-(window as any).currentUserId = currentUserId;
-
-// --- Fetch current user if token exists ---
-(async () => {
-    const token = sessionStorage.getItem("token") || localStorage.getItem("jwt");
-    if (token) {
-        try {
-            const res = await fetchUserMe();
-            if (res.success) {
-                me = res.user; 
-                window.currentUserId = me.id;
-                sessionStorage.setItem("me", JSON.stringify(me));
-                console.log("[INIT] Fetched current user:", me);
-            } else {
-                console.warn("Failed to fetch /me:", res.error);
-            }
-        } catch (err) {
-            console.error("Error fetching current user:", err);
-        }
-    }
-})();
 
 // Store user in sessionStorage on login
 window.saveUserSession = function (user: any) {
@@ -236,6 +174,18 @@ function initSocket(friendsIds: number[]) {
 
         socket.on("onlineFriends", (onlineIds: number[]) => {
             onlineIds.forEach(id => updateFriendStatus(id, true));
+        });
+         // -------------------------
+        // 🔥 NEW: Real-time friend requests
+        // -------------------------
+        socket.on("friend:request", () => {
+            console.log("[socket] Received a new friend request");
+            loadIncomingRequests();
+        });
+
+        socket.on("friend:accepted", () => {
+            console.log("[socket] Your friend request was accepted");
+            loadAllFriendsData();
         });
     }
 }
@@ -294,7 +244,7 @@ function updateFriendStatus(userId: number, online: boolean) {
         const container = document.getElementById("friends-incoming")!;
         container.innerHTML = "Loading...";
 
-        const res = await getIncomingRequests(currentUserId);        
+        const res = await getIncomingRequests(window.currentUserId);        
         if (!res.success) {
             container.innerHTML = "Failed to load requests";
             return;
@@ -350,22 +300,13 @@ function updateFriendStatus(userId: number, online: boolean) {
     });
 
 // ----------------------------
-// Load all friend data
-// ----------------------------
-async function loadAllFriendsData() {
-    await loadFriendList();
-    await loadIncomingRequests();
-    await loadSentRequests();
-}
-
-// ----------------------------
 // Sent friend requests
 // ----------------------------
 async function loadSentRequests() {
     const container = document.getElementById("friends-sent")!;
     container.innerHTML = "Loading...";
 
-    const res = await getSentRequests(currentUserId);   
+    const res = await getSentRequests(window.currentUserId);   
     if (!res.success) {
         container.innerHTML = "Failed to load sent requests";
         return;
@@ -395,6 +336,14 @@ async function loadSentRequests() {
     });
 }
 
+// ----------------------------
+// Load all friend data
+// ----------------------------
+async function loadAllFriendsData() {
+    await loadFriendList();
+    await loadIncomingRequests();
+    await loadSentRequests();
+}
 // ----------------------------
 // Send friend request form
 // ----------------------------
@@ -483,15 +432,15 @@ async function loadMatchHistory(userId: number) {
             return `
                 <div class="p-3 border-b border-gray-600">
                     <div class="flex flex-col justify-left">
-                        <span class="text-sm text-white"><strong>${myName}</strong> Vs <strong>${opponentName}</strong></span>
-                        <span class="text-sm text-white">Date: ${formatMatchDate(m.date)}</span>
+                        <span class="text-sm text-gray-400"><strong>${myName}</strong> Vs <strong>${opponentName}</strong></span>
+                        <span class="text-sm text-gray-400">Date: ${formatMatchDate(m.date)}</span>
                     </div>
-                    <div class="text-sm text-white">
+                    <div class="text-sm text-gray-400">
                         Score: <span class="text-orange-400">${myScore}</span>
                         - 
                         <span class="text-blue-400">${oppScore}</span>
                     </div>
-                    <div class="text-sm text-white">
+                    <div class="text-sm text-gray-400">
                         Result: <strong class="${resultForUser === 'win' ? 'text-green-400' :
                                 resultForUser === 'loss' ? 'text-red-400' : 'text-yellow-400'}">
                             ${resultForUser}
