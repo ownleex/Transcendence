@@ -78,6 +78,10 @@ export class BlockchainService {
         const receipt = await tx.wait();
 
         console.log(`✅ Tournament recorded on blockchain! Block: ${receipt.blockNumber}`);
+
+        const explorerUrl = `https://testnet.snowtrace.io/tx/${receipt.hash}?chainid=43113`;
+        console.log(`🌍 View on Explorer: ${explorerUrl}`);
+        
         return tx.hash;
 
     } catch (error) {
