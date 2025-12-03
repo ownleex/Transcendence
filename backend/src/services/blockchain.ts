@@ -77,10 +77,14 @@ export class BlockchainService {
         
         const receipt = await tx.wait();
 
-        console.log(`✅ Tournament recorded on blockchain! Block: ${receipt.blockNumber}`);
+        console.log(`✅ Tournament recorded on blockchain! Block: ${receipt.blockNumber}\n`);
 
-        const explorerUrl = `https://testnet.snowtrace.io/tx/${receipt.hash}?chainid=43113`;
-        console.log(`🌍 View on Explorer: ${explorerUrl}`);
+        const explorerUrl = `https://testnet.snowtrace.io/tx/${receipt.hash}?chainid=43113\n`;
+        console.log(`🌍 View Transaction: ${explorerUrl}`);
+
+        const contractAddr = process.env.TOURNAMENT_CONTRACT_ADDRESS;
+        const contractUrl = `https://testnet.snowtrace.io/address/${contractAddr}/contract/43113/code\n`;
+        console.log(`📜 View Contract:    ${contractUrl}`);
         
         return tx.hash;
 
