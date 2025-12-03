@@ -75,9 +75,9 @@ export class BlockchainService {
 
         console.log(`⏳ Transaction sent: ${tx.hash}. Waiting for confirmation...`);
         
-        await tx.wait();
+        const receipt = await tx.wait();
 
-        console.log(`✅ Tournament recorded on blockchain! Block: ${tx.blockNumber}`);
+        console.log(`✅ Tournament recorded on blockchain! Block: ${receipt.blockNumber}`);
         return tx.hash;
 
     } catch (error) {
