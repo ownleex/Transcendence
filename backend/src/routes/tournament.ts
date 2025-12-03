@@ -140,8 +140,6 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
         if (tournamentData && tournamentData.WinnerName) {
             // Appel au service Blockchain
-            // On ne met pas 'await' ici si on veut rendre la réponse rapide (non bloquant)
-            // Mais pour le debug, on peut laisser comme tel ou ajouter des logs.
             blockchainService.recordTournament(
                 tournamentData.name,
                 tournamentData.WinnerName,
