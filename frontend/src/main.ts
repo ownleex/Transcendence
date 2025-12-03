@@ -27,7 +27,8 @@ async function ensureCurrentUser() {
             window.currentUserId = me.id;
 
             sessionStorage.setItem("me", JSON.stringify(me));
-            console.log("[ensureCurrentUser] Updated user:", me);
+            localStorage.setItem("me", JSON.stringify(me)); 
+	    console.log("[ensureCurrentUser] Updated me object:", me);
         } else {
             console.warn("[ensureCurrentUser] Failed to fetch /me:", res.error);
         }
