@@ -73,7 +73,7 @@ export class BlockchainService {
             participantsCount
         );
 
-        console.log(`⏳ Transaction sent: ${tx.hash}. Waiting for confirmation...`);
+        console.log(`⏳ Transaction sent: ${tx.hash}. Waiting for confirmation...\n`);
         
         const receipt = await tx.wait();
 
