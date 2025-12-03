@@ -1,4 +1,3 @@
-
 // backend/src/services/blockchain.ts
 
 import { ethers } from "ethers";
@@ -6,12 +5,35 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// ✅ MISE A JOUR : On utilise l'ABI complet (format JSON) au lieu de la chaine de caractères manuelle.
+// Cela permet à ethers.js de comprendre aussi les Events si besoin plus tard.
 const CONTRACT_ABI = [
-  "function registerTournament(uint256 _timestamp, string memory _name, string memory _winnerName, uint256 _participants) external"
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "_timestamp", "type": "uint256" },
+      { "internalType": "string", "name": "_name", "type": "string" },
+      { "internalType": "string", "name": "_winnerName", "type": "string" },
+      { "internalType": "uint256", "name": "_participants", "type": "uint256" }
+    ],
+    "name": "registerTournament",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "uint256", "name": "timestamp", "type": "uint256" },
+      { "indexed": false, "internalType": "string", "name": "name", "type": "string" },
+      { "indexed": false, "internalType": "string", "name": "winnerName", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "participants", "type": "uint256" }
+    ],
+    "name": "TournamentRegistered",
+    "type": "event"
+  }
 ];
 
 export class BlockchainService {
-  // 👇 AJOUTEZ DES '?' ICI : Cela dit à TS "C'est peut-être undefined, t'inquiète pas"
   private provider?: ethers.JsonRpcProvider;
   private wallet?: ethers.Wallet;
   private contract?: ethers.Contract;
@@ -21,7 +43,6 @@ export class BlockchainService {
     const privateKey = process.env.BACKEND_WALLET_PRIVATE_KEY;
     const contractAddress = process.env.TOURNAMENT_CONTRACT_ADDRESS;
 
-    // Si la config manque, on arrête là (et les variables restent undefined)
     if (!rpcUrl || !privateKey || !contractAddress) {
       console.error("❌ Blockchain config missing in .env");
       return;
@@ -31,6 +52,7 @@ export class BlockchainService {
       this.provider = new ethers.JsonRpcProvider(rpcUrl);
       this.wallet = new ethers.Wallet(privateKey, this.provider);
       this.contract = new ethers.Contract(contractAddress, CONTRACT_ABI, this.wallet);
+      console.log(`✅ Blockchain initialization successful. Connected to contract at ${contractAddress}`);
     } catch (error) {
       console.error("❌ Blockchain initialization failed:", error);
     }
@@ -38,7 +60,6 @@ export class BlockchainService {
 
   async recordTournament(name: string, winnerName: string, participantsCount: number) {
     try {
-        // On vérifie ici si le contrat existe avant de l'utiliser
         if (!this.contract) throw new Error("Contract not initialized");
 
         console.log(`🔗 Blockchain: Recording tournament '${name}'...`);
@@ -66,25 +87,3 @@ export class BlockchainService {
 }
 
 export const blockchainService = new BlockchainService();
-
-// backend/src/services/blockchain.ts
-/*
-export class BlockchainService {
-    constructor() {
-        console.log("⚠️ Blockchain disabled — running in no-op mode");
-    }
-
-    async recordTournament(
-        name: string,
-        winnerName: string,
-        participantsCount: number
-    ) {
-        console.log(
-            `⚠️ Blockchain disabled — pretending to record tournament '${name}'`
-        );
-        return null; // or return a fake hash if needed
-    }
-}
-
-export const blockchainService = new BlockchainService();
-*/
