@@ -86,7 +86,13 @@ export class BlockchainService {
         const contractUrl = `https://testnet.snowtrace.io/address/${contractAddr}/contract/43113/code\n`;
         console.log(`📜 View Contract:    ${contractUrl}`);
         
-        return tx.hash;
+        return {
+        success: true,
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        explorerUrl: `https://testnet.snowtrace.io/tx/${receipt.hash}?chainid=43113`,
+        contractUrl: `https://testnet.snowtrace.io/address/${contractAddr}/contract/43113/code`
+        };
 
     } catch (error) {
         console.error("❌ Blockchain Error:", error);

@@ -139,12 +139,18 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         );
 
         if (tournamentData && tournamentData.WinnerName) {
-            // Appel au service Blockchain
-            blockchainService.recordTournament(
-                tournamentData.name,
-                tournamentData.WinnerName,
-                tournamentData.playerCount || 8 
-            );
+          // 👇 On capture le résultat complet
+          const blockchainResult = await blockchainService.recordTournament(
+              tournamentData.name,
+              tournamentData.WinnerName,
+              tournamentData.playerCount || 8
+        );
+        
+        // 👇 On l'envoie au frontend dans la réponse
+        return reply.send({ 
+            success: true, 
+            blockchain: blockchainResult 
+        });
         } else {
             console.warn("⚠️ Impossible d'enregistrer sur la blockchain: Vainqueur introuvable.");
         }
