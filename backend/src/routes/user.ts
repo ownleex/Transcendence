@@ -110,76 +110,79 @@ export default async function userRoutes(fastify: FastifyInstance) {
             reply.code(401).send({ success: false, error: "Unauthorized" });
         }
     });
-  // ----------------------------
-  // Generate 2FA secret (setup)
-  // ----------------------------
-  fastify.post("/user/:id/2fa/setup", async (req, reply) => {
-    const { id } = req.params as any;
 
-    try {
-      const secret = speakeasy.generateSecret({
-        name: `Transcendence42 (${id})`,
-        length: 20,
-      });
+    // ----------------------------
+    // Setup 2FA
+    // ----------------------------
+    fastify.post("/2fa/setup", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const userId = (req as any).user.id; // from JWT
 
-      await fastify.db.run("UPDATE User SET twofa_secret = ? WHERE id = ?", [secret.base32, id]);
-      if (!secret.otpauth_url) {
-  throw new Error('Failed to generate 2FA URL');
-}
-      const qrCodeDataURL = await qrcode.toDataURL(secret.otpauth_url);
+        try {
+            const secret = speakeasy.generateSecret({
+                name: `Transcendence42 (${userId})`,
+                length: 20,
+            });
 
-      reply.send({
-        success: true,
-        secret: secret.base32,
-        qrCodeDataURL,
-      });
-    } catch (err: any) {
-      reply.code(500).send({ success: false, error: err.message });
-    }
-  });
+            if (!secret.base32 || !secret.otpauth_url) {
+                throw new Error("Failed to generate 2FA secret or URL");
+            }
 
-  // ----------------------------
-  // Verify 2FA token
-  // ----------------------------
-  fastify.post("/user/:id/2fa/verify", async (req, reply) => {
-    const { id } = req.params as any;
-    const { token } = req.body as any;
+            await fastify.db.run("UPDATE User SET twofa_secret = ? WHERE id = ?", [secret.base32, userId]);
 
-    if (!token) {
-      return reply.code(400).send({ success: false, error: "2FA token required" });
-    }
+            const qrCodeDataURL = await qrcode.toDataURL(secret.otpauth_url);
 
-    try {
-      const user = await fastify.db.get("SELECT twofa_secret FROM User WHERE id = ?", [id]);
-      if (!user?.twofa_secret) return reply.code(404).send({ success: false, error: "2FA not set up" });
+            reply.send({
+                success: true,
+                secret: secret.base32,
+                qrCodeDataURL,
+            });
+        } catch (err: any) {
+            console.error("2FA setup error:", err);
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
 
-      const verified = speakeasy.totp.verify({
-        secret: user.twofa_secret,
-        encoding: "base32",
-        token,
-      });
+    // ----------------------------
+    // Verify 2FA token
+    // ----------------------------
+    fastify.post("/2fa/verify", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const userId = (req as any).user.id;
+        const { token } = req.body as any;
 
-      if (!verified) return reply.code(401).send({ success: false, error: "Invalid 2FA token" });
+        if (!token) return reply.code(400).send({ success: false, error: "2FA token required" });
 
-      reply.send({ success: true, message: "2FA verified successfully" });
-    } catch (err: any) {
-      reply.code(500).send({ success: false, error: err.message });
-    }
-  });
+        try {
+            const user = await fastify.db.get("SELECT twofa_secret FROM User WHERE id = ?", [userId]);
+            if (!user?.twofa_secret) return reply.code(404).send({ success: false, error: "2FA not set up" });
 
-  // ----------------------------
-  // Disable 2FA
-  // ----------------------------
-  fastify.delete("/user/:id/2fa", async (req, reply) => {
-    const { id } = req.params as any;
+            const verified = speakeasy.totp.verify({
+                secret: user.twofa_secret,
+                encoding: "base32",
+                token,
+            });
 
-    try {
-      await fastify.db.run("UPDATE User SET twofa_secret = NULL WHERE id = ?", [id]);
-      reply.send({ success: true, message: "2FA disabled successfully" });
-    } catch (err: any) {
-      reply.code(500).send({ success: false, error: err.message });
-    }
-  });
+            if (!verified) return reply.code(401).send({ success: false, error: "Invalid 2FA token" });
+
+            reply.send({ success: true, message: "2FA verified successfully" });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
+
+    // ----------------------------
+    // Disable 2FA
+    // ----------------------------
+    fastify.delete("/2fa", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+        const userId = (req as any).user.id;
+
+        try {
+            await fastify.db.run("UPDATE User SET twofa_secret = NULL WHERE id = ?", [userId]);
+            reply.send({ success: true, message: "2FA disabled successfully" });
+        } catch (err: any) {
+            reply.code(500).send({ success: false, error: err.message });
+        }
+    });
+
   function normalizeAvatar(avatar: string | null | undefined) {
         if (!avatar) return "/uploads/default.png";
         if (/^https?:\/\//i.test(avatar)) return avatar;

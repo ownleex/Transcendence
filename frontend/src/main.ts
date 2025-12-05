@@ -3,6 +3,7 @@ import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
 import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, getMatchHistory, fetchUserMe } from "./api";
+import { setup2FA, verify2FA } from "./api";
 import { io } from "socket.io-client";
 
 // -------------------------
@@ -109,6 +110,11 @@ window.addEventListener("DOMContentLoaded", async () => {
                 await ensureCurrentUser();
                 loadProfile();
                 break;
+            case "#auth":
+                document.getElementById("authentication-panel")!.classList.remove("hidden");
+                await ensureCurrentUser();
+                init2FASetup();
+                break;
 
             default:
                 app.innerHTML = `<p class="text-red-500">Page not found</p>`;
@@ -130,6 +136,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     document.querySelector('#userMenuDropdown [data-target="friends-panel"]')
         ?.addEventListener("click", () => (window.location.hash = "#friends"));
+
+    document.querySelector('#userMenuDropdown [data-target="authentication-panel"]')
+        ?.addEventListener("click", () => (window.location.hash = "#auth"));
 });
 
 // Store user in sessionStorage on login
@@ -456,3 +465,96 @@ async function loadMatchHistory(userId: number) {
         container.innerHTML = "<p class='text-red-400'>Failed to load matches. Please try again later.</p>";
     }
 }
+
+// ----------------------------
+// 2FA SETUP LOGIC
+// ----------------------------
+function init2FASetup() {
+    const setupBtn = document.getElementById("setup2FA");
+    const qrContainer = document.getElementById("qrcode-container");
+
+    if (!setupBtn || !qrContainer) return;
+
+    setupBtn.addEventListener("click", async () => {
+        const token = sessionStorage.getItem("token") || localStorage.getItem("jwt");
+        if (!token) { // JWT must exist
+            qrContainer.innerHTML = "<p class='text-red-500'>User not authenticated.</p>";
+            return;
+        }
+
+        qrContainer.innerHTML = "<p class='text-gray-500'>Generating QR code...</p>";
+
+        try {
+            const res = await setup2FA(); // API call already uses JWT
+
+            if (!res.success) throw new Error(res.error || "Failed to generate 2FA");
+
+            // Display QR + secret + input
+            qrContainer.innerHTML = `
+                <div class="mt-4 text-center">
+                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                        Scan this QR code with Google Authenticator or Authy:
+                    </p>
+                    <img src="${res.qrCodeDataURL}" class="mx-auto border rounded shadow" />
+                    <p class="text-sm mt-3">Secret: <strong>${res.secret}</strong></p>
+                    <div class="mt-4">
+                        <input id="twofa-verify-input"
+                               maxlength="6"
+                               class="border p-2 rounded w-40 text-center"
+                               placeholder="Enter 6-digit code">
+                        <button id="twofa-verify-btn"
+                                class="ml-2 px-3 py-1 bg-green-600 text-white rounded">
+                            Verify
+                        </button>
+                        <p id="twofa-verify-msg" class="mt-2 text-sm"></p>
+                    </div>
+                </div>
+            `;
+
+            attach2FAVerifyHandler();
+
+        } catch (err: any) {
+            console.error("2FA setup error:", err);
+            qrContainer.innerHTML = `<p class='text-red-500'>${err.message}</p>`;
+        }
+    });
+}
+
+// ----------------------------
+// Verify 2FA
+// ----------------------------
+function attach2FAVerifyHandler() {
+    const btn = document.getElementById("twofa-verify-btn");
+    const input = document.getElementById("twofa-verify-input") as HTMLInputElement;
+    const msg = document.getElementById("twofa-verify-msg");
+
+    if (!btn || !input || !msg) return;
+
+    btn.addEventListener("click", async () => {
+        const totp = input.value.trim();
+
+        if (totp.length !== 6) {
+            msg.textContent = "Enter a 6-digit code";
+            msg.className = "text-red-500 text-sm";
+            return;
+        }
+
+        try {
+            const res = await verify2FA(totp); // uses JWT automatically
+
+            if (!res.success) {
+                msg.textContent = res.error || "Invalid code";
+                msg.className = "text-red-500 text-sm";
+                return;
+            }
+
+            msg.textContent = "2FA successfully enabled!";
+            msg.className = "text-green-500 text-sm";
+
+        } catch (err: any) {
+            msg.textContent = "Network error";
+            msg.className = "text-red-500 text-sm";
+        }
+    });
+}
+
