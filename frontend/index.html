@@ -115,7 +115,7 @@
         </div>
     </section>
     <!-- SIGN IN SECTION -->
-    <section id="signin-section" class="bg-white dark:bg-gray-900 shadow-xl rounded-2xl p-8 w-80 sm:w-96 text-center transition-all duration-500">
+    <section id="signin-section" method="POST" action="https://localhost:3000/api/auth/signin" class="bg-white dark:bg-gray-900 shadow-xl rounded-2xl p-8 w-80 sm:w-96 text-center transition-all duration-500">
         <h2 class="text-2xl font-semibold mb-6 text-gray-800 dark:text-gray-100">Sign in</h2>
 
         <form id="signin-form">
@@ -147,6 +147,23 @@
             </a>
         </form>
 
+    </section>
+
+    <!-- 2FA SECTION -->
+    <section id="twofa-login-section" class="hidden bg-white dark:bg-gray-900 shadow-xl rounded-2xl p-8 w-80 sm:w-96 text-center">
+        <h2 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Enter 2FA Code</h2>
+
+        <input id="twofa-login-token"
+               maxlength="6"
+               placeholder="6-digit code"
+               class="w-full mb-4 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700">
+
+        <button id="twofa-login-submit"
+                class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
+            Verify
+        </button>
+
+        <p id="twofa-login-msg" class="mt-3 text-sm text-gray-600"></p>
     </section>
 
     <!-- SIGN UP SECTION -->
@@ -253,6 +270,10 @@
                                     role="menuitem" data-target="matches-panel">
                                 Matches
                             </button>
+                            <button type="button" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    role="menuitem" data-target="authentication-panel">
+                                Authentication
+                            </button>
                         </div>
                     </div>
                     <!-- Logout -->
@@ -347,7 +368,19 @@
                 </div>
             </div>
         </section>
-
+        <!-- AUTHENTICATION PANEL -->
+        <section id="authentication-panel" class="hidden w-full max-w-4xl mt-8">
+            <div class="bg-white dark:bg-gray-900 rounded-lg p-6">
+                <h3 class="text-lg font-semibold mb-3 text-orange-500">Two-Factor Authentication</h3>
+                <button id="setup2FA" class="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">
+                    Enable 2FA
+                </button>
+                <div id="qrcode-container"></div>
+                <div class="mt-4">
+                    <button onclick="showSection('pong-section')" class="px-3 py-1 bg-blue-600 rounded cursor-pointer">Back</button>
+                </div>
+            </div>
+        </section>
         <!-- Main -->
         <main id="pongContent" class="flex-1 p-8 space-y-10 text-center">
             <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100">Welcome to Transcendence Pong!</h1>
@@ -597,7 +630,7 @@
             let messageHandled = false;
             function messageListener(ev) {
                 try {
-                    // adapt origin check as needed; accept any for debug, then lock down               
+                    // adapt origin check as needed; accept any for debug, then lock down
                     const data = ev.data;
                     if (data && (data.token || data.jwt)) {
                         const t = data.token || data.jwt;
@@ -623,8 +656,16 @@
     </script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const signinForm = document.getElementById('signin-form');
+      	 document.addEventListener('DOMContentLoaded', () => {
+         const signinForm = document.getElementById('signin-form');
+         const twofaSubmitBtn = document.getElementById('twofa-login-submit');
+         const twofaInput = document.getElementById('twofa-login-token');
+ 	 const twofaMsg = document.getElementById('twofa-login-msg');
+
+ // Avoid crashing if the 2FA elements do not exist yet
+ if (!twofaSubmitBtn || !twofaInput || !twofaMsg) {
+     console.warn('2FA elements not found on page. Skipping 2FA setup.');
+ }
 
             signinForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -641,11 +682,20 @@
                     const res = await fetch('https://localhost:3000/api/auth/signin', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user, password }),
+                        body: JSON.stringify({ username: user, password }),
                     });
 
                     const data = await res.json();
+                    // 2FA REQUIRED → show second-step UI
+                    if (res.status === 403 && data.require2FA) { // backend sends require2FA
+                        sessionStorage.setItem('pendingUser', user);
+                        sessionStorage.setItem('pendingPass', password);
+                        document.getElementById('signin-section')?.classList.add('hidden'); // hide signin
+                        document.getElementById('twofa-login-section')?.classList.remove('hidden');
+                        return;
+                    }
 
+                    // NORMAL LOGIN (no 2FA activated)
                     if (res.ok && data.token) {
                         // Save token and show Pong section
                         localStorage.setItem('token', data.token);
@@ -662,6 +712,58 @@
                     }
                 } catch (err) {
                     alert('Network error — please try again.');
+                }
+            });
+            // 2FA submit
+            twofaSubmitBtn?.addEventListener('click', async () => {
+                const code = twofaInput.value.trim();
+                if (code.length !== 6) {
+                    twofaMsg.textContent = 'Enter a valid 6-digit code';
+                    twofaMsg.className = 'text-red-500';
+                    return;
+                }
+
+                const username = sessionStorage.getItem('pendingUser');
+                const password = sessionStorage.getItem('pendingPass');
+                if (!username || !password) {
+                    twofaMsg.textContent = 'Missing login info. Please sign in again.';
+                    twofaMsg.className = 'text-red-500';
+                    return;
+                }
+
+                try {
+                    const res = await fetch('https://localhost:3000/api/auth/signin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password, token: code })
+                    });
+
+                    const data = await res.json();
+                    if (!data.success) {
+                        twofaMsg.textContent = data.error || 'Invalid 2FA code';
+                        twofaMsg.className = 'text-red-500';
+                        return;
+                    }
+
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('jwt', data.token);
+
+                    twofaMsg.textContent = 'Logged in!';
+                    twofaMsg.className = 'text-green-500';
+
+                    document.getElementById('header1-section')?.classList.add('hidden');
+
+                    document.getElementById('twofa-login-section')?.classList.add('hidden');
+                    document.getElementById('pong-section')?.classList.remove('hidden');
+
+                    window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
+
+                    sessionStorage.removeItem('pendingUser');
+                    sessionStorage.removeItem('pendingPass');
+
+                } catch (err) {
+                    twofaMsg.textContent = 'Network error. Try again.';
+                    twofaMsg.className = 'text-red-500';
                 }
             });
         });
@@ -702,7 +804,7 @@
                     window.location.href = '/frontend/index.html';
 
                 } catch (err) {
-                    console.error('Logout error:', err);                
+                    console.error('Logout error:', err);
                     showSigninSection?.();
                 }
             });
@@ -721,7 +823,7 @@
                 e.stopPropagation();
             });
             // Panel IDs used in your markup
-            const panelIds = ['profile-panel', 'friends-panel', 'matches-panel'];
+            const panelIds = ['profile-panel', 'friends-panel', 'matches-panel', 'authentication-panel'];
             // show a specific panel (hide others)
             function showPanel(panelId) {
                 panelIds.forEach(id => {
@@ -1027,7 +1129,73 @@
                 loadProfile();
             }
         });
-    </script>  
+    </script>
+    <script>
+        document.getElementById("twofa-login-submit")?.addEventListener("click", async () => {
+            const code = (document.getElementById("twofa-login-token") as HTMLInputElement).value.trim();
+            const msg = document.getElementById("twofa-login-msg");
+
+            if (code.length !== 6) {
+                msg.textContent = "Enter a valid 6-digit code";
+                msg.className = "text-red-500";
+                return;
+            }
+
+            try {
+                // Use the new backend route which reads JWT from Authorization header
+                const jwt = localStorage.getItem('jwt') || sessionStorage.getItem('token');
+                if (!jwt) {
+                    msg.textContent = "No authentication token found. Please login again.";
+                    msg.className = "text-red-500";
+                    return;
+                }
+
+                const res = await fetch("https://localhost:3000/user/2fa/verify", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${jwt}`   // send JWT so server knows the user
+                    },
+                    body: JSON.stringify({ token: code })  // server expects { token }
+                });
+
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    msg.textContent = data.error || "Invalid 2FA code";
+                    msg.className = "text-red-500";
+                    return;
+                }
+
+                // On success, server may optionally return a new JWT (refresh token flow)
+                if (data.token) {
+                    localStorage.setItem('jwt', data.token);
+                    sessionStorage.setItem('token', data.token);
+                }
+
+                if (data.user) {
+                    localStorage.setItem('me', JSON.stringify(data.user));
+                    sessionStorage.setItem('me', JSON.stringify(data.user));
+                }
+
+                msg.textContent = "2FA verified successfully!";
+                msg.className = "text-green-500";
+
+                // Show main UI
+                document.getElementById("twofa-login-section")?.classList.add("hidden");
+                document.getElementById("pong-section")?.classList.remove("hidden");
+
+                window.dispatchEvent(new CustomEvent('auth:changed', { detail: { loggedIn: true } }));
+
+            } catch (err) {
+                console.error("2FA login error:", err);
+                msg.textContent = "Network error. Try again.";
+                msg.className = "text-red-500";
+            }
+        });
+    </script>
+
+
     <script type="module" src="./src/alias.ts"></script>
     <script type="module" src="./src/main.ts"></script>
 </body>

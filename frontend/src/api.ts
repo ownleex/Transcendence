@@ -31,19 +31,25 @@ export const login = (user: { username: string; password: string; token?: string
         //if (data.token) localStorage.setItem("token", data.token);
         if (data.token) {
             localStorage.setItem("jwt", data.token);
-            sessionStorage.setItem("token", data.token); // optional
+            sessionStorage.setItem("token", data.token);
         }
       return data;
     });
 
-export const setup2FA = (userId: number) =>
-  request(`/user/${userId}/2fa/setup`, { method: "POST" });
+// --- 2FA ---
+export const setup2FA = () => {
+    return request("/user/2fa/setup", {
+        method: "POST",
+        body: JSON.stringify({}),
+    });
+};
 
-export const verify2FA = (userId: number, token: string) =>
-  request(`/user/${userId}/2fa/verify`, {
-    method: "POST",
-    body: JSON.stringify({ token }),
-  });
+export const verify2FA = (tokenValue: string) => {
+    return request("/user/2fa/verify", {
+        method: "POST",
+        body: JSON.stringify({ token: tokenValue }),
+    });
+};
 
 // --- FRIENDS ---
 export const sendFriendRequest = (username: string) => {
