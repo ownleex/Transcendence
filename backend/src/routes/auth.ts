@@ -4,6 +4,7 @@ import fetch from "node-fetch";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import * as bcrypt from "bcryptjs";
+import speakeasy from "speakeasy";
 
 const FORTYTWO_CONFIGURATION = {
   authorizeHost: "https://api.intra.42.fr",
@@ -340,6 +341,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const body = request.body as any || {};
       const suppliedUser = body.user || body.username;
       const password = body.password as string | undefined;
+      // On récupère aussi le token 2FA s'il est envoyé
+      const token2FA = body.token as string | undefined; 
 
       if (!suppliedUser || !password) {
         return reply.code(400).send({ success: false, error: "Username and password required" });
@@ -360,7 +363,26 @@ export default async function authRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ success: false, error: "Invalid credentials" });
       }
 
-      // create JWT (include minimal data)
+      // AJOUT DE LA LOGIQUE 2FA 
+      if (user.twofa_secret) {
+          // Si l'utilisateur n'a pas envoyé de code, on le bloque et on lui dit "require2FA"
+          if (!token2FA) {
+              return reply.code(403).send({ success: false, require2FA: true, message: "2FA token required" });
+          }
+
+          // Sinon, on vérifie le code
+          const verified = speakeasy.totp.verify({
+              secret: user.twofa_secret,
+              encoding: "base32",
+              token: token2FA,
+          });
+
+          if (!verified) {
+              return reply.code(401).send({ success: false, error: "Invalid 2FA token" });
+          }
+      }
+      // 🔥 FIN DE L'AJOUT 🔥
+
       const jwt = fastify.jwt.sign({ id: user.id, username: user.username });
 
       // reply with full object so frontend can store token + cached user
@@ -369,6 +391,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         token: jwt,
         user: { id: user.id, username: user.username, email: user.email ?? null }
       });
+
     } catch (err: unknown) {
       if (err instanceof Error) {
         fastify.log.error(err, "signin error");
