@@ -104,16 +104,17 @@ export default async function userRoutes(fastify: FastifyInstance) {
     // Disable 2FA
     // ----------------------------
     fastify.delete("/2fa", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-        const userId = (req as any).user.id;
-
+        console.log("Disable 2FA hit, user:", (req as any).user);
         try {
+            const userId = (req as any).user.id;
+            console.log("Disabling 2FA for userId:", userId);
             await fastify.db.run("UPDATE User SET twofa_secret = NULL WHERE id = ?", [userId]);
             reply.send({ success: true, message: "2FA disabled successfully" });
         } catch (err: any) {
+            console.error("Error disabling 2FA:", err);
             reply.code(500).send({ success: false, error: err.message });
         }
     });
-
   function normalizeAvatar(avatar: string | null | undefined) {
         if (!avatar) return "/uploads/default.png";
         if (/^https?:\/\//i.test(avatar)) return avatar;
@@ -127,6 +128,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
             u.username,
             u.email,
             u.avatar,
+            u.twofa_secret,
             p.nickname,
             p.elo,
             p.rank,

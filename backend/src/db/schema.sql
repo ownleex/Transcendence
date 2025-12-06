@@ -122,9 +122,6 @@ CREATE TABLE Notification (
     owner_id INTEGER NOT NULL,
     FOREIGN KEY (owner_id) REFERENCES User(id) ON DELETE CASCADE
 );
-INSERT INTO User (username, password, email) VALUES
-('alice', '1234', 'alice@example.com'),
-('bob', '5678', 'bob@example.com');
 
 ALTER TABLE User ADD COLUMN avatar TEXT DEFAULT '/uploads/default.png';
 ALTER TABLE OAuth ADD COLUMN access_token TEXT;

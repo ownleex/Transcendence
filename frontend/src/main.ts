@@ -3,7 +3,7 @@ import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
 import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, getMatchHistory, fetchUserMe } from "./api";
-import { setup2FA, verify2FA } from "./api";
+import { setup2FA, verify2FA, disable2FA } from "./api";
 import { io } from "socket.io-client";
 
 // -------------------------
@@ -114,6 +114,8 @@ window.addEventListener("DOMContentLoaded", async () => {
                 document.getElementById("authentication-panel")!.classList.remove("hidden");
                 await ensureCurrentUser();
                 init2FASetup();
+                init2FADisable();                
+                update2FAButtons();
                 break;
 
             default:
@@ -192,10 +194,24 @@ function initSocket(friendsIds: number[]) {
             console.log("[socket] Received a new friend request");
             loadIncomingRequests();
         });
-
+        /*
         socket.on("friend:accepted", () => {
             console.log("[socket] Your friend request was accepted");
             loadAllFriendsData();
+        });
+        */
+        socket.on("friend:accepted", async ({ userId }) => {
+            console.log("[socket] Friend accepted:", userId);
+
+            // Reload all friend data
+            await loadAllFriendsData();
+
+            // After loading friends, get all their IDs
+            const friendIds = Array.from(document.querySelectorAll("#friends-list [data-user-id]"))
+                .map(el => Number(el.getAttribute("data-user-id")));
+
+            // Request online status for all friends
+            socket!.emit("get:onlineFriends", friendIds);
         });
     }
 }
@@ -558,3 +574,57 @@ function attach2FAVerifyHandler() {
     });
 }
 
+// ----------------------------
+// Disable 2FA
+// ----------------------------
+function init2FADisable() {
+    const disableBtn = document.getElementById("disable2FA");
+    const enableBtn = document.getElementById("setup2FA");
+
+    if (!disableBtn) return;
+
+    disableBtn.addEventListener("click", async () => {
+        if (!confirm("Are you sure you want to disable Two-Factor Authentication?")) {
+            return;
+        }
+
+        try {
+            const res = await disable2FA(); // automatically uses JWT
+
+            if (!res.success) throw new Error(res.error || "Failed to disable 2FA");
+
+            alert("Two-factor authentication successfully disabled.");
+
+            // Toggle UI
+            enableBtn?.classList.remove("hidden");
+            disableBtn.classList.add("hidden");
+
+            // Update stored user data
+            const me = JSON.parse(localStorage.getItem("me") || "{}");
+            me.twofa_secret = null;
+            localStorage.setItem("me", JSON.stringify(me));
+            update2FAButtons();
+
+            // Inform rest of app
+            window.dispatchEvent(new CustomEvent("auth:changed"));
+        } catch (err: any) {
+            alert(err.message || "Network error disabling 2FA.");
+            console.error(err);
+        }
+    });
+}
+
+function update2FAButtons() {
+    const enableBtn = document.getElementById("setup2FA");
+    const disableBtn = document.getElementById("disable2FA");
+
+    if (!enableBtn || !disableBtn) return;
+
+    if (me.twofa_secret) {
+        enableBtn.classList.add("hidden");
+        disableBtn.classList.remove("hidden");
+    } else {
+        enableBtn.classList.remove("hidden");
+        disableBtn.classList.add("hidden");
+    }
+}

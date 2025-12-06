@@ -50,6 +50,9 @@ export const verify2FA = (tokenValue: string) => {
         body: JSON.stringify({ token: tokenValue }),
     });
 };
+export const disable2FA = () => {
+    return request("/user/2fa", { method: "DELETE", body: JSON.stringify({}) });
+}
 
 // --- FRIENDS ---
 export const sendFriendRequest = (username: string) => {
