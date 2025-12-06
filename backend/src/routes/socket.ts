@@ -82,25 +82,7 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
         io.to(room).emit("chat:message", msg);
       }
     );
-    /*
-    socket.on("chat:message", (payload: { matchId: number; text: any }) => {
-        if (!payload || typeof payload.matchId !== "number") return;
-        if (!payload.text || typeof payload.text !== "string") {
-            fastify.log.warn({ payload }, "Invalid chat message payload");
-            return;
-        }
-
-        const room = `match_${payload.matchId}`;
-        const msg: ChatMessage = {
-            from: userId!,
-            text: payload.text.trim().slice(0, 500),
-            at: new Date().toISOString(),
-        };
-
-        io.to(room).emit("chat:message", msg);
-        fastify.log.info({ userId, room, msg }, "Chat message sent");
-    });
-    */
+   
     // retourner les amis en ligne
     socket.on("get:onlineFriends", (friendsIds: number[]) => {
     if (!Array.isArray(friendsIds)) return;
@@ -108,7 +90,25 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
 
     // Send the list back only to the requester
     socket.emit("onlineFriends", online);
-  });
+    });
+      // --- Friend Accepted Event (new) ---
+      socket.on("friend:accepted", async (payload: { senderId: number; receiverId: number }) => {
+          const { senderId, receiverId } = payload;
+
+          // Notify sender
+          const senderSocketId = onlineUsers.get(senderId);
+          if (senderSocketId) {
+              io.to(senderSocketId).emit("friend:accepted", { userId: receiverId });
+          }
+
+          // Notify receiver
+          const receiverSocketId = onlineUsers.get(receiverId);
+          if (receiverSocketId) {
+              io.to(receiverSocketId).emit("friend:accepted", { userId: senderId });
+          }
+
+          fastify.log.info({ senderId, receiverId }, "Friend accepted event emitted to both users");
+      });
     // --- Déconnexion ---
     socket.on("disconnect", () => {
       onlineUsers.delete(userId!);
