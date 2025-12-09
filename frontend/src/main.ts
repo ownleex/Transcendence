@@ -55,15 +55,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     function bindHomeButtons() {
         const gameContainer = document.getElementById("gameContainer")!;
         const playDuoBtn = document.getElementById("playDuoBtn");
+        const playDuoLocalBtn = document.getElementById("playDuoLocalBtn");
         const playQuadBtn = document.getElementById("playQuadBtn");
+        const playQuadLocalBtn = document.getElementById("playQuadLocalBtn");
         const viewTournamentBtn = document.getElementById("viewtournamentBtn");
 
         playDuoBtn?.addEventListener("click", () => {
             showGame(gameContainer, "duo");
         });
 
+        playDuoLocalBtn?.addEventListener("click", () => {
+            showGame(gameContainer, "local-duo");
+        });
+
         playQuadBtn?.addEventListener("click", () => {
             showGame(gameContainer, "quad");
+        });
+
+        playQuadLocalBtn?.addEventListener("click", () => {
+            showGame(gameContainer, "local-quad");
         });
 
         // bouton "View Tournaments" dans les quick actions

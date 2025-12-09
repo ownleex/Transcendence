@@ -24,6 +24,21 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
   const onlineUsers = new Map<number, string>();
   (fastify as any).io = io;
   (fastify as any).onlineUsers = onlineUsers;
+    // Expose helper to look up username by id if db is present (cached)
+  const usernameCache = new Map<number, string>();
+  (fastify as any).lookupUsername = async (userId: number) => {
+    if (usernameCache.has(userId)) return usernameCache.get(userId)!;
+    try {
+      const row = await fastify.db.get('SELECT username FROM "User" WHERE id = ?', [userId]);
+      const name = row?.username || `User ${userId}`;
+      usernameCache.set(userId, name);
+      return name;
+    } catch {
+      const name = `User ${userId}`;
+      usernameCache.set(userId, name);
+      return name;
+    }
+  };
 
   io.on("connection", async (socket) => {
     let userId: number | null = null;
@@ -48,6 +63,13 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
         socket.disconnect(true);
         return;
       }
+      // store username for chat reuse
+      try {
+        const row = await fastify.db.get('SELECT username FROM "User" WHERE id = ?', [userId]);
+        socket.data.username = row?.username || `User ${userId}`;
+      } catch {
+        socket.data.username = `User ${userId}`;
+      }
     } catch (err) {
       fastify.log.error({ err }, "Socket auth failed");
       socket.disconnect(true);
@@ -69,14 +91,26 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
     
     socket.on(
       "chat:message",
-      (payload: { matchId: number; text: string }) => {
+      async (payload: { matchId: number; text: string }) => {
         if (!payload || !payload.matchId || !payload.text) return;
 
         const room = `match_${payload.matchId}`;
-        const msg: ChatMessage = {
+        let fromUsername = socket.data.username as string | undefined;
+        if (!fromUsername) {
+          try {
+            const row = await fastify.db.get('SELECT username FROM "User" WHERE id = ?', [userId]);
+            fromUsername = row?.username;
+          } catch {
+            /* noop */
+          }
+        }
+        if (!fromUsername) fromUsername = `User ${userId}`;
+
+        const msg: ChatMessage & { fromUsername?: string } = {
           from: userId!,
           text: payload.text.toString().slice(0, 500),
           at: new Date().toISOString(),
+          fromUsername,
         };
 
         io.to(room).emit("chat:message", msg);

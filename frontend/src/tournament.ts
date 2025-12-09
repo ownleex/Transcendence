@@ -42,10 +42,7 @@ export async function showTournament(container: HTMLElement) {
 
     btn.onclick = () => {
         container.innerHTML = "";
-        showGame(container, {
-            mode: "tournament",
-            players: { p1: p1.alias, p2: p2.alias }
-        });
+        showGame(container, "duo");
     };
 
     container.appendChild(btn);
