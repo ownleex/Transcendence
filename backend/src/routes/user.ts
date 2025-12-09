@@ -340,51 +340,25 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     }
 });
 
-/*
-fastify.get("/user/:id/matches", async (req, reply) => {
-  const { id } = req.params as any;
-  try {
-    const matches = await fastify.db.all(
-      "SELECT * FROM MatchHistory WHERE user_id = ? ORDER BY date DESC",
-      [id]
-    );
-    reply.send({ success: true, matches });
-  } catch (err: any) {
-    reply.code(500).send({ success: false, error: err.message });
-  }
+fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { userId } = req.body as any;  // the person being unblocked
+    const blockerId = (req.user as any).id;
+
+    try {
+        await fastify.db.run(
+            `UPDATE Friend
+            SET status='pending'
+            WHERE (user_id=? AND friend_id=?)
+            OR (user_id=? AND friend_id=?)`,
+            [blockerId, userId, userId, blockerId]
+        );
+        reply.send({ success: true });
+    } catch (err: any) {
+        reply.code(500).send({ success: false, error: err.message });
+    }
 });
 
-fastify.get("/user/:id/match-history", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-        const { id } = req.params as any;
-
-        try {
-            const rows = await fastify.db.all(
-                `SELECT 
-                    mh.match_id,
-                    mh.user_id,
-                    u1.username AS user_name,
-                    mh.opponent_id,
-                    u2.username AS opponent_name,
-                    mh.user_score,
-                    mh.opponent_score,
-                    mh.user_elo,
-                    mh.date,
-                    mh.result
-                 FROM MatchHistory mh
-                 LEFT JOIN User u1 ON mh.user_id = u1.id
-                 LEFT JOIN User u2 ON mh.opponent_id = u2.id
-                 WHERE mh.user_id = ?
-                 ORDER BY mh.date DESC`,
-                [id]
-            );
-
-            reply.send({ success: true, matches: rows });
-        } catch (err: any) {
-            reply.code(500).send({ success: false, error: err.message });
-        }
-});
-    */
-     // ----------------------------
+    // ----------------------------
     // Get Match History
     // ----------------------------
     fastify.get("/:id/match-history",

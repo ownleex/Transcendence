@@ -75,6 +75,12 @@ export const blockFriend = (userId: number) =>
     body: JSON.stringify({ userId })
   });
 
+export const unblockFriend = (userId: number) =>
+    request("/user/friend/unblock", {
+        method: "PUT",
+        body: JSON.stringify({ userId })
+    });
+
 export const getFriends = (userId: number) =>
     request(`/user/${userId}/friends`);
 

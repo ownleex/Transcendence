@@ -2,7 +2,7 @@
 import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
-import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, getMatchHistory, fetchUserMe } from "./api";
+import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, unblockFriend, getMatchHistory, fetchUserMe } from "./api";
 import { setup2FA, verify2FA, disable2FA } from "./api";
 import { io } from "socket.io-client";
 
@@ -291,15 +291,35 @@ function updateFriendStatus(userId: number, online: boolean) {
         res.requests.forEach(req => {
             const div = document.createElement("div");
             div.className = "p-2 border rounded mb-1 flex justify-between items-center";
+            let blockButtonHTML = "";
+
+            if (req.status === "blocked") {
+                blockButtonHTML = `
+                    <button class="unblock-btn px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                            data-id="${req.id}">
+                        Unblock
+                    </button>
+                `;
+                        } else {
+                            blockButtonHTML = `
+                    <button class="block-btn px-2 py-1 bg-red-600 text-white text-xs rounded"
+                            data-id="${req.id}">
+                        Block
+                    </button>
+                `;
+            }
 
             div.innerHTML = `
                 <span>${req.username}</span>
                 <div class="flex gap-2">
-                    <button class="accept-btn px-2 py-1 bg-green-600 text-white text-xs rounded" data-id="${req.id}">Accept</button>
-                    <button class="block-btn px-2 py-1 bg-red-600 text-white text-xs rounded" data-id="${req.id}">Block</button>
+                    <button class="accept-btn px-2 py-1 bg-green-600 text-white text-xs rounded"
+                            data-id="${req.id}">
+                        Accept
+                    </button>
+                    ${blockButtonHTML}
                 </div>
             `;
-
+            
             container.appendChild(div);
         });
 
@@ -316,24 +336,60 @@ function updateFriendStatus(userId: number, online: boolean) {
 }
   // ----------------------------
     // Event listener for accept/block
-    // ----------------------------
-    document.addEventListener("click", async (e) => {
-        const target = e.target as HTMLElement;
+// ----------------------------
+document.addEventListener("click", async (e) => {
+    const target = e.target as HTMLElement;
 
-        if (target.classList.contains("accept-btn")) {
-            const requesterId = Number(target.dataset.id);
-            await acceptFriend(requesterId);
-            loadIncomingRequests();
-            loadSentRequests();
-        }
+    // -------------------------------
+    // ACCEPT
+    // -------------------------------
+    if (target.classList.contains("accept-btn")) {
+        const requesterId = Number(target.dataset.id);
+        await acceptFriend(requesterId);
+        loadIncomingRequests();
+        loadSentRequests();
+    }
 
-        if (target.classList.contains("block-btn")) {
-            const userIdToBlock = Number(target.dataset.id);
-            await blockFriend(userIdToBlock);
-            loadIncomingRequests();
-            loadSentRequests();
-        }
-    });
+    // -------------------------------
+    // BLOCK → UNBLOCK
+    // -------------------------------
+    if (target.classList.contains("block-btn")) {
+        const userId = Number(target.dataset.id);
+
+        // swap instantly in UI
+        target.outerHTML = `
+            <button class="unblock-btn px-2 py-1 bg-blue-600 text-white text-xs rounded"
+                    data-id="${userId}">
+                Unblock
+            </button>
+        `;
+
+        // backend update + reload
+        await blockFriend(userId);
+        loadIncomingRequests();
+        loadSentRequests();
+    }
+
+    // -------------------------------
+    // UNBLOCK → BLOCK
+    // -------------------------------
+    if (target.classList.contains("unblock-btn")) {
+        const userId = Number(target.dataset.id);
+
+        // instant UI change
+        target.outerHTML = `
+            <button class="block-btn px-2 py-1 bg-red-600 text-white text-xs rounded"
+                    data-id="${userId}">
+                Block
+            </button>
+        `;
+
+        // backend update + reload
+        await unblockFriend(userId);
+        loadIncomingRequests();
+        loadSentRequests();
+    }
+});
 
 // ----------------------------
 // Sent friend requests
@@ -351,7 +407,7 @@ async function loadSentRequests() {
     container.innerHTML = "";
     res.sent.forEach(req => {
         const div = document.createElement("div");
-        div.className = "p-2 border rounded mb-1 flex justify-between items-center";
+        div.className = "request-item p-2 border rounded mb-1 flex justify-between items-center";
 
           // Status text depending on friend.status
         let statusText = "";
