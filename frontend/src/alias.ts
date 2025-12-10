@@ -1,5 +1,6 @@
 // frontend/alias.ts
-const API_BASE = "https://localhost:3000/api";
+//const API_BASE = "https://localhost:3000/api";
+const API_BASE = window.location.origin + "/api";
 
 async function request(endpoint: string, options: RequestInit = {}) {
   const headers = { "Content-Type": "application/json" };

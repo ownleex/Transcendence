@@ -7,9 +7,16 @@ import path from "path";
 import fetch from 'node-fetch';
 
 export default async function userRoutes(fastify: FastifyInstance) {
-	const getOnlineUsers = () =>
-        (fastify as any).onlineUsers as Map<number, string> | undefined;
+	//const getOnlineUsers = () =>
+    //   (fastify as any).onlineUsers as Map<number, string> | undefined;
 
+    // --- CORRECTION TRANSCENDENCE ---
+    // 1. On récupère 'io' depuis fastify pour l'utiliser dans toutes les routes ci-dessous
+    const io = (fastify as any).io;
+
+    // 2. On récupère 'onlineUsers' et on FORCE le type en Map<number, string>
+    // Cela corrige l'erreur "Property 'get' does not exist on type 'Set'"
+    const onlineUsers = (fastify as any).onlineUsers as Map<number, string>;
 // ----------------------------
 // Register new user
 // ----------------------------
@@ -221,6 +228,15 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
                 "INSERT INTO Notification (title, type, data, owner_id) VALUES (?, ?, ?, ?)",
                 [title, type, data, friend.id]
             );
+            // --- Ici, onlineUsers et io sont maintenant connus grâce à la déclaration en haut ---
+            const friendSocketId = onlineUsers.get(friend.id);
+            if (friendSocketId) {
+                io.to(friendSocketId).emit("friend:request", {
+                    fromUserId: userId,
+                    fromUsername: (req.user as any).username
+                });
+                fastify.log.info(`Notification temps réel envoyée à ${friend.id}`);
+            }
             reply.send({ success: true, friendId: friend.id });
         } catch (err: any) {
             reply.code(500).send({ success: false, error: err.message });
@@ -263,7 +279,7 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     });
 
     // --- use global onlineUsers from socket.ts ---
-    const onlineUsers = fastify.onlineUsers;
+    //const onlineUsers = fastify.onlineUsers;
 
     // List friends with online info
     fastify.get("/:id/friends", { preHandler: [fastify.authenticate] }, async (req, reply) => {
@@ -313,7 +329,16 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
       await fastify.db.run(
         "UPDATE UserStats SET friends = friends + 1 WHERE user_id IN (?, ?)",
         [userId, friendId]
-      );
+        );
+        const senderSocketId = onlineUsers.get(userId);
+        if (senderSocketId) {
+            io.to(senderSocketId).emit("friend:accepted", { userId: friendId });
+        }
+
+        const receiverSocketId = onlineUsers.get(friendId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("friend:accepted", { userId: userId });
+        }
     }
       await addFriendHistoryEvent(fastify.db, userId);
       await addFriendHistoryEvent(fastify.db, friendId);

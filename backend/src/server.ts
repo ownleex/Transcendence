@@ -41,8 +41,10 @@ fastify.register(fastifyCookie, {
   secret: process.env.COOKIE_SECRET || "dev_cookie_secret",
   parseOptions: {
     httpOnly: true,
-    sameSite: "lax",
-    secure: false, // <-- DEV ONLY
+      //sameSite: "lax",
+      //secure: false, // <-- DEV ONLY
+      sameSite: "none",
+      secure: true,
     path: "/",
   },
 });
@@ -177,6 +179,25 @@ fastify.setNotFoundHandler((req, reply) => {
 // -------------------------
 const start = async () => {
     try {
+        await fastify.listen({
+            port: 3000,
+            host: "::",      // enables IPv4 + IPv6
+            ipv6Only: false, // dual stack mode
+        });
+        console.log("🚀 Server running on:");
+        console.log("   https://<IPv4>:3000");
+        console.log("   https://[<IPv6>]:3000");
+    } catch (err) {
+        fastify.log.error(err);
+        process.exit(1);
+    }
+};
+
+start();
+
+/*
+const start = async () => {
+    try {
         await fastify.listen({ port: 3000, host: "0.0.0.0" });
         console.log("🚀 Transcendence running at https://localhost:3000");
     } catch (err) {
@@ -186,4 +207,4 @@ const start = async () => {
 };
 
 start();
-
+*/

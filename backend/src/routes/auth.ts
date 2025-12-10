@@ -6,6 +6,9 @@ import crypto from "crypto";
 import * as bcrypt from "bcryptjs";
 import speakeasy from "speakeasy";
 
+// At the top of auth.ts
+const API_BASE = process.env.API_BASE || "https://localhost:3000";
+
 const FORTYTWO_CONFIGURATION = {
   authorizeHost: "https://api.intra.42.fr",
   authorizePath: "/oauth/authorize",
@@ -68,7 +71,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       auth: FORTYTWO_CONFIGURATION,
     },
     startRedirectPath: "/api/auth/signin",
-    callbackUri: "https://localhost:3000/api/auth/callback/42",
+      callbackUri: `${API_BASE}/api/auth/callback/42`,
   });
 
   // ===== Register GitHub OAuth2 =====
@@ -83,7 +86,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       auth: GITHUB_CONFIGURATION,
     },
     startRedirectPath: "/api/auth/github/login",
-    callbackUri: "https://localhost:3000/api/auth/callback/github",
+      callbackUri: `${API_BASE}/api/auth/callback/github`,
   });
   // ====== 42 Callback ======
   fastify.get("/api/auth/callback/42", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -115,7 +118,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       // store tokens in OAuth table
       await upsertOAuth(fastify, user.id, "42", accessToken, refreshToken, expiresAt);
       const jwt = fastify.jwt.sign({ id: user.id, username: user.username });
-      reply.redirect(`/frontend/index.html?token=${jwt}`);
+        reply.redirect(`${API_BASE}/frontend/index.html?token=${jwt}`);
     } catch (err) {
       fastify.log.error(err as Error, "42 OAuth callback error");
       reply.code(500).send({ error: "42 authentication failed" });
@@ -168,7 +171,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       // store tokens in OAuth table
       await upsertOAuth(fastify, user.id, "github", accessToken, refreshToken, expiresAt);
       const jwt = fastify.jwt.sign({ id: user.id, username: user.username });
-      reply.redirect(`/frontend/index.html?token=${jwt}`);
+        reply.redirect(`${API_BASE}/frontend/index.html?token=${jwt}`);
     } catch (err: any) {
       console.error("=== GitHub OAuth error START ===");
       console.error("err:", err);
@@ -197,7 +200,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
             }                
 
             // IMPORTANT: redirect to SIGNIN, not callback
-            const redirectBack = encodeURIComponent("https://localhost:3000/api/auth/signin");
+            const redirectBack = encodeURIComponent(`${API_BASE}/api/auth/signin`);
             return reply.redirect(`https://auth.intra.42.fr/logout?redirect=${redirectBack}`);
         } catch (err) {
             fastify.log.error(err);
@@ -221,7 +224,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
                 } catch (_) { }
             } 
 
-            return reply.redirect("https://localhost:3000/api/auth/github/login");
+            return reply.redirect(`${API_BASE}/api/auth/github/login`);
         } catch (err) {
             fastify.log.error(err);
             reply.code(500).send({ error: "GitHub logout failed" });
@@ -421,7 +424,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     const expiry = Date.now() + 15 * 60 * 1000; // 15 min
     resetTokens.set(token, { userId: user.id, expiry });
 
-    const resetLink = `https://localhost:3000/reset-password?token=${token}`;
+      const resetLink = `${API_BASE}/reset-password?token=${token}`;
 
     try {
       const transporter = nodemailer.createTransport({

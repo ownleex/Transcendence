@@ -33,13 +33,15 @@ RUN npm install
 COPY backend/src ./src
 COPY backend/tsconfig.json ./
 
-# 3️⃣ Générer les certificats SSL automatiquement
+# 3️⃣ Générer les certificats SSL automatiquement (localhost + LAN IP)
+ARG LAN_IP=192.168.1.74  # replace with your host LAN IP or pass as build-arg
+
 RUN mkdir -p /app/backend/certs && \
-    openssl req -x509 -newkey rsa:4096 -nodes \
+    openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
     -keyout /app/backend/certs/server.key \
     -out /app/backend/certs/server.crt \
-    -days 365 \
-    -subj "/C=FR/ST=Alpes-Maritimes/L=Nice/O=42 Nice/OU=42 Nice/CN=localhost/emailAddress=transcendence@42nice.fr"
+    -subj "/C=FR/ST=Alpes-Maritimes/L=Nice/O=42 Nice/OU=42 Nice/CN=localhost" \
+    -addext "subjectAltName = DNS:localhost, IP:127.0.0.1, IP:${LAN_IP}"
 
 # 4️⃣ Compile backend TypeScript
 RUN npx tsc
