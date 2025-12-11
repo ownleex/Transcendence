@@ -46,6 +46,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     console.log("[DOMContentLoaded] User ready:", me);
 
+    // Initialize socket connection once at startup
+    initSocket();
+
     // activate hash router
     window.addEventListener("hashchange", router);
 
@@ -179,50 +182,60 @@ window.showFriendsPanel = function () {
 // ----------------------------
 let socket: ReturnType<typeof io> | null = null;
 
-function initSocket(friendsIds: number[]) {
-    if (!socket) {
-        const token = localStorage.getItem("jwt");
-        if (!token) return;
+function initSocket() {
+    if (socket) return; // Socket already initialized
 
-        socket = io("https://saul-unsubpoenaed-lakeisha.ngrok-free.dev", { auth: { token } });
+    const token = localStorage.getItem("jwt");
+    if (!token) return;
 
-        // Friend online/offline updates
-        socket.on("user:online", ({ userId }) => updateFriendStatus(userId, true));
-        socket.on("user:offline", ({ userId }) => updateFriendStatus(userId, false));
+    socket = io("https://saul-unsubpoenaed-lakeisha.ngrok-free.dev", { auth: { token } });
 
-        socket.on("connect", () => {
-            socket!.emit("get:onlineFriends", friendsIds);
-        });
+    // Friend online/offline updates
+    socket.on("user:online", ({ userId }: { userId: number }) => updateFriendStatus(userId, true));
+    socket.on("user:offline", ({ userId }: { userId: number }) => updateFriendStatus(userId, false));
 
-        socket.on("onlineFriends", (onlineIds: number[]) => {
-            onlineIds.forEach(id => updateFriendStatus(id, true));
-        });
-         // -------------------------
-        // 🔥 NEW: Real-time friend requests
-        // -------------------------
-        socket.on("friend:request", () => {
-            console.log("[socket] Received a new friend request");
-            loadIncomingRequests();
-        });
-        /*
-        socket.on("friend:accepted", () => {
-            console.log("[socket] Your friend request was accepted");
-            loadAllFriendsData();
-        });
-        */
-        socket.on("friend:accepted", async ({ userId }) => {
-            console.log("[socket] Friend accepted:", userId);
+    socket.on("connect", () => {
+        console.log("[socket] Connected - requesting online friends");
+        requestOnlineFriendsUpdate();
+    });
 
-            // Reload all friend data
-            await loadAllFriendsData();
+    socket.on("onlineFriends", (onlineIds: number[]) => {
+        onlineIds.forEach(id => updateFriendStatus(id, true));
+    });
+     // -------------------------
+    // 🔥 NEW: Real-time friend requests
+    // -------------------------
+    socket.on("friend:request", () => {
+        console.log("[socket] Received a new friend request");
+        loadIncomingRequests();
+    });
+    /*
+    socket.on("friend:accepted", () => {
+        console.log("[socket] Your friend request was accepted");
+        loadAllFriendsData();
+    });
+    */
+    socket.on("friend:accepted", async ({ userId }: { userId: number }) => {
+        console.log("[socket] Friend accepted:", userId);
 
-            // After loading friends, get all their IDs
-            const friendIds = Array.from(document.querySelectorAll("#friends-list [data-user-id]"))
-                .map(el => Number(el.getAttribute("data-user-id")));
+        // Reload all friend data
+        await loadAllFriendsData();
 
-            // Request online status for all friends
-            socket!.emit("get:onlineFriends", friendIds);
-        });
+        // After loading friends, request online status update
+        requestOnlineFriendsUpdate();
+    });
+}
+
+// Helper to request online status for all friends
+function requestOnlineFriendsUpdate() {
+    if (!socket) return;
+
+    const friendIds = Array.from(document.querySelectorAll("#friends-list [data-user-id]"))
+        .map(el => Number(el.getAttribute("data-user-id")));
+
+    if (friendIds.length > 0) {
+        console.log("[socket] Requesting online status for friends:", friendIds);
+        socket.emit("get:onlineFriends", friendIds);
     }
 }
 
@@ -255,11 +268,12 @@ async function loadFriendList() {
 
         container.appendChild(item);
     });
-    const friendIds = res.friends
-        .filter(f => f.id !== window.currentUserId)
-        .map(f => f.id);
-    // Init socket now that we have friend IDs
-    initSocket(friendIds);
+
+    // Init socket (only once, on first call)
+    initSocket();
+
+    // Request online status for all friends
+    requestOnlineFriendsUpdate();
 }
 
 // ----------------------------
