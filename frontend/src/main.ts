@@ -184,7 +184,7 @@ function initSocket(friendsIds: number[]) {
         const token = localStorage.getItem("jwt");
         if (!token) return;
 
-        socket = io("https://localhost:3000", { auth: { token } });
+        socket = io("https://saul-unsubpoenaed-lakeisha.ngrok-free.dev", { auth: { token } });
 
         // Friend online/offline updates
         socket.on("user:online", ({ userId }) => updateFriendStatus(userId, true));
