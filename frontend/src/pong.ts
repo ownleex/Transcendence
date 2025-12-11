@@ -192,13 +192,40 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
                 canvas.height = config.height;
             }
 
+            // Mise à jour de la balle (toujours depuis le serveur)
             state.ball.x = msg.state.ball.x;
             state.ball.y = msg.state.ball.y;
             state.ball.vx = msg.state.ball.vx;
             state.ball.vy = msg.state.ball.vy;
-            state.paddles = msg.state.paddles;
+
+            // Réconciliation des paddles : ne pas écraser le paddle du joueur local
+            // (prédiction côté client), mais interpoler légèrement les autres joueurs
+            const myPaddleKey = `p${myPaddleIndex}` as keyof PaddleState;
+            const newPaddles = { ...state.paddles };
+
+            // Mettre à jour tous les paddles sauf le mien
+            (Object.keys(msg.state.paddles) as Array<keyof PaddleState>).forEach((key) => {
+                if (key !== myPaddleKey) {
+                    const serverValue = msg.state.paddles[key] as number;
+                    const currentValue = state.paddles[key] as number;
+                    // Interpolation douce pour éviter les saccades (20% vers la nouvelle position)
+                    newPaddles[key] = currentValue + (serverValue - currentValue) * 0.3 as any;
+                }
+            });
+
+            state.paddles = newPaddles;
             scores = msg.scores;
             renderScores(scoreBox, scores, isQuad, undefined, msg.names);
+        });
+
+        // Nouvel événement pour les mises à jour de la balle uniquement (60 FPS)
+        gameSocket.on("ball", (msg: any) => {
+            if (msg.ball) {
+                state.ball.x = msg.ball.x;
+                state.ball.y = msg.ball.y;
+                state.ball.vx = msg.ball.vx;
+                state.ball.vy = msg.ball.vy;
+            }
         });
 
         gameSocket.on("end", (msg: any) => {
@@ -206,34 +233,72 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
             renderScores(scoreBox, scores, isQuad, msg?.winner || "END", msg?.names);
         });
 
-        // Envoi des mouvements
+        // Envoi des mouvements avec prédiction côté client
         paddleInterval = window.setInterval(() => {
             if (!gameSocket || !myPaddleIndex) return;
             const payload: any = { type: "paddle" };
             const speed = config.paddleSpeed;
+            const paddleLen = config.paddleLength;
 
+            // Helper pour clamper les valeurs
+            const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+
+            let moved = false;
+
+            // Prédiction côté client : mise à jour locale IMMÉDIATE
             if (myPaddleIndex === 1) {
-                if (keys.has("w")) payload.value = state.paddles.p1 - speed;
-                if (keys.has("s")) payload.value = state.paddles.p1 + speed;
-                payload.axis = "y";
+                let newValue = state.paddles.p1;
+                if (keys.has("w")) { newValue -= speed; moved = true; }
+                if (keys.has("s")) { newValue += speed; moved = true; }
+                if (moved) {
+                    // Clamp et mise à jour locale instantanée
+                    newValue = clamp(newValue, paddleLen / 2, config.height - paddleLen / 2);
+                    state.paddles.p1 = newValue;
+                    payload.value = newValue;
+                    payload.axis = "y";
+                }
             }
             if (myPaddleIndex === 2) {
-                if (keys.has("ArrowUp")) payload.value = state.paddles.p2 - speed;
-                if (keys.has("ArrowDown")) payload.value = state.paddles.p2 + speed;
-                payload.axis = "y";
+                let newValue = state.paddles.p2;
+                if (keys.has("ArrowUp")) { newValue -= speed; moved = true; }
+                if (keys.has("ArrowDown")) { newValue += speed; moved = true; }
+                if (moved) {
+                    // Clamp et mise à jour locale instantanée
+                    newValue = clamp(newValue, paddleLen / 2, config.height - paddleLen / 2);
+                    state.paddles.p2 = newValue;
+                    payload.value = newValue;
+                    payload.axis = "y";
+                }
             }
             if (myPaddleIndex === 3 && isQuad) {
-                if (keys.has("a")) payload.value = (state.paddles.p3 ?? 0) - speed;
-                if (keys.has("d")) payload.value = (state.paddles.p3 ?? 0) + speed;
-                payload.axis = "x";
+                let newValue = state.paddles.p3 ?? 0;
+                if (keys.has("a")) { newValue -= speed; moved = true; }
+                if (keys.has("d")) { newValue += speed; moved = true; }
+                if (moved) {
+                    // Clamp et mise à jour locale instantanée
+                    newValue = clamp(newValue, paddleLen / 2, config.width - paddleLen / 2);
+                    state.paddles.p3 = newValue;
+                    payload.value = newValue;
+                    payload.axis = "x";
+                }
             }
             if (myPaddleIndex === 4 && isQuad) {
-                if (keys.has("j")) payload.value = (state.paddles.p4 ?? 0) - speed;
-                if (keys.has("l")) payload.value = (state.paddles.p4 ?? 0) + speed;
-                payload.axis = "x";
+                let newValue = state.paddles.p4 ?? 0;
+                if (keys.has("j")) { newValue -= speed; moved = true; }
+                if (keys.has("l")) { newValue += speed; moved = true; }
+                if (moved) {
+                    // Clamp et mise à jour locale instantanée
+                    newValue = clamp(newValue, paddleLen / 2, config.width - paddleLen / 2);
+                    state.paddles.p4 = newValue;
+                    payload.value = newValue;
+                    payload.axis = "x";
+                }
             }
 
-            if (payload.value !== undefined) gameSocket.emit("paddle", payload);
+            // N'envoyer que si le joueur a bougé
+            if (payload.value !== undefined && moved) {
+                gameSocket.emit("paddle", payload);
+            }
         }, 1000 / 60);
 
         // Init chat
