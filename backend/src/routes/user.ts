@@ -143,9 +143,11 @@ export default async function userRoutes(fastify: FastifyInstance) {
             us.winrate,
             us.friends
         FROM User u
-        LEFT JOIN Player p ON u.id = p.user_id AND p.tournament_id = 1
+        LEFT JOIN Player p ON u.id = p.user_id
         LEFT JOIN UserStats us ON u.id = us.user_id
-        WHERE u.id = ?`,
+        WHERE u.id = ?
+        ORDER BY p.tournament_id DESC
+        LIMIT 1`,
             [userId]
         );
     }
