@@ -83,6 +83,8 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     let canvas!: HTMLCanvasElement;
     let ctx!: CanvasRenderingContext2D;
     let scoreBox!: HTMLDivElement;
+    let statusBox!: HTMLDivElement;
+    let readyButton: HTMLButtonElement | null = null;
     let messagesList: HTMLUListElement | null = null;
     let chatForm: HTMLFormElement | null = null;
     let chatInput: HTMLInputElement | null = null;
@@ -108,7 +110,14 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     }
 
     const keys = new Set<string>();
-    const keydownHandler = (e: KeyboardEvent) => keys.add(e.key);
+    const keydownHandler = (e: KeyboardEvent) => {
+        if (!isLocal && !matchStarted && !isReady && (e.key === " " || e.key === "Enter")) {
+            e.preventDefault();
+            sendReady();
+            return;
+        }
+        keys.add(e.key);
+    };
     const keyupHandler = (e: KeyboardEvent) => keys.delete(e.key);
     window.addEventListener("keydown", keydownHandler);
     window.addEventListener("keyup", keyupHandler);
@@ -116,7 +125,24 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     let gameSocket: Socket | null = null;
     let paddleInterval: number | null = null;
     let running = true;
+    let matchStarted = isLocal;
+    let isReady = isLocal;
     let myPaddleIndex: number | null = null;
+    const setStatus = (text: string) => {
+        if (statusBox) statusBox.textContent = text;
+    };
+    const sendReady = () => {
+        if (isLocal || isReady) return;
+        isReady = true;
+        if (readyButton) {
+            readyButton.disabled = true;
+            readyButton.textContent = "Prêt";
+        }
+        setStatus("Prêt - en attente des autres joueurs");
+        if (gameSocket) {
+            gameSocket.emit("ready");
+        }
+    };
 
     // ---------------------------
     // Remote matchmaking + WS
@@ -164,12 +190,35 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
             canvas,
             ctx,
             scoreBox,
+            statusBox,
             messagesList,
             chatForm,
             chatInput,
         } = buildUI(container, !isLocal));
 
         currentMatchId = matchId;
+    
+        if (!isLocal) {
+            readyButton = document.createElement("button");
+            readyButton.textContent = "Je suis prêt";
+            readyButton.style.position = "absolute";
+            readyButton.style.left = "50%";
+            readyButton.style.bottom = "24px";
+            readyButton.style.transform = "translateX(-50%)";
+            readyButton.style.padding = "10px 18px";
+            readyButton.style.borderRadius = "10px";
+            readyButton.style.border = "none";
+            readyButton.style.background = "#2563eb";
+            readyButton.style.color = "#fff";
+            readyButton.style.fontWeight = "700";
+            readyButton.style.boxShadow = "0 6px 12px rgba(0,0,0,0.15)";
+            readyButton.addEventListener("click", (e) => {
+                e.preventDefault();
+                sendReady();
+            });
+            wrapper.appendChild(readyButton);
+            setStatus('Match trouvé ! Appuie sur "Espace" ou clique sur "Je suis prêt" pour lancer le match.');
+        }
 
         gameSocket = io(`${window.location.origin}/game`, {
             transports: ["polling"],
@@ -218,6 +267,40 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
             renderScores(scoreBox, scores, isQuad, undefined, msg.names);
         });
 
+
+        gameSocket.on("ready", (msg: any) => {
+            if (msg?.readyIds?.includes(currentUserId)) {
+                isReady = true;
+                if (readyButton) {
+                    readyButton.disabled = true;
+                    readyButton.textContent = "Prêt";
+                }
+            }
+            if (msg?.total) {
+                setStatus(`Prêts: ${msg.readyCount ?? 0}/${msg.total}`);
+            }
+        });
+
+        gameSocket.on("countdown", (msg: any) => {
+            matchStarted = false;
+            setStatus(`Départ dans ${msg.seconds}s`);
+            if (readyButton) readyButton.disabled = true;
+        });
+
+        gameSocket.on("start", (msg: any) => {
+            matchStarted = true;
+            isReady = true;
+            if (msg?.state) {
+                state.ball = msg.state.ball;
+                state.paddles = msg.state.paddles;
+                scores = msg.scores || scores;
+                renderScores(scoreBox, scores, isQuad, undefined, msg.names);
+            }
+            setStatus("GO !");
+            if (readyButton) readyButton.style.display = "none";
+            setTimeout(() => setStatus(""), 1200);
+        });
+
         // Nouvel événement pour les mises à jour de la balle uniquement (60 FPS)
         gameSocket.on("ball", (msg: any) => {
             if (msg.ball) {
@@ -230,12 +313,14 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
 
         gameSocket.on("end", (msg: any) => {
             running = false;
+            matchStarted = false;
             renderScores(scoreBox, scores, isQuad, msg?.winner || "END", msg?.names);
         });
 
         // Envoi des mouvements avec prédiction côté client
         paddleInterval = window.setInterval(() => {
             if (!gameSocket || !myPaddleIndex) return;
+            if (!matchStarted) return;
             const payload: any = { type: "paddle" };
             const speed = config.paddleSpeed;
             const paddleLen = config.paddleLength;
@@ -315,6 +400,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
             canvas,
             ctx,
             scoreBox,
+            statusBox,
             messagesList,
             chatForm,
             chatInput,
@@ -368,7 +454,11 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         }
         window.removeEventListener("keydown", keydownHandler);
         window.removeEventListener("keyup", keyupHandler);
+        (window as any).stopCurrentGame = undefined;
     }
+
+    // expose teardown for external navigation (e.g., Home button)
+    (window as any).stopCurrentGame = teardown;
 }
 
 // ---------------------------
@@ -569,6 +659,7 @@ function buildUI(
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;
     scoreBox: HTMLDivElement;
+    statusBox: HTMLDivElement;
     messagesList: HTMLUListElement | null;
     chatForm: HTMLFormElement | null;
     chatInput: HTMLInputElement | null;
@@ -627,6 +718,20 @@ function buildUI(
     scoreBox.style.fontSize = "14px";
     wrapper.appendChild(scoreBox);
 
+    const statusBox = document.createElement("div");
+    statusBox.style.position = "absolute";
+    statusBox.style.top = "52px";
+    statusBox.style.left = "50%";
+    statusBox.style.transform = "translateX(-50%)";
+    statusBox.style.background = "rgba(17,24,39,0.85)";
+    statusBox.style.color = "#fff";
+    statusBox.style.padding = "6px 10px";
+    statusBox.style.borderRadius = "8px";
+    statusBox.style.fontSize = "13px";
+    statusBox.style.fontWeight = "600";
+    statusBox.style.pointerEvents = "none";
+    wrapper.appendChild(statusBox);
+
     let messagesList: HTMLUListElement | null = null;
     let chatForm: HTMLFormElement | null = null;
     let chatInput: HTMLInputElement | null = null;
@@ -683,7 +788,7 @@ function buildUI(
         wrapper.appendChild(chatWrapper);
     }
 
-    return { overlay, wrapper, canvas, ctx, scoreBox, messagesList, chatForm, chatInput };
+    return { overlay, wrapper, canvas, ctx, scoreBox, statusBox, messagesList, chatForm, chatInput };
 }
 
 // ---------------------------
