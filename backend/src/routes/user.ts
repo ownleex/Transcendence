@@ -137,17 +137,15 @@ export default async function userRoutes(fastify: FastifyInstance) {
             u.avatar,
             u.twofa_secret,
             p.nickname,
-            p.elo,
+            COALESCE(us.elo, p.elo, 1000) as elo,
             p.rank,
-            us.matches_played,
-            us.winrate,
+            COALESCE(us.matches_played, 0) as matches_played,
+            COALESCE(us.winrate, 0) as winrate,
             us.friends
         FROM User u
-        LEFT JOIN Player p ON u.id = p.user_id
+        LEFT JOIN Player p ON u.id = p.user_id AND p.tournament_id = 1
         LEFT JOIN UserStats us ON u.id = us.user_id
-        WHERE u.id = ?
-        ORDER BY p.tournament_id DESC
-        LIMIT 1`,
+        WHERE u.id = ?`,
             [userId]
         );
     }
@@ -413,8 +411,10 @@ fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (re
                         mh.match_id,
                         mh.user_id,
                         u1.username AS user_name,
+                        u1.avatar AS user_avatar,
                         mh.opponent_id,
                         u2.username AS opponent_name,
+                        u2.avatar AS opponent_avatar,
                         mh.user_score,
                         mh.opponent_score,
                         mh.user_elo,
@@ -427,8 +427,13 @@ fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (re
                      ORDER BY mh.date DESC`,
                     [id, id]
                 );
-                fastify.log.info({ id, rows }, "MatchHistory query result");
-                reply.send({ success: true, matches: rows });
+                const normalized = rows.map((row: any) => ({
+                    ...row,
+                    user_avatar: normalizeAvatar(row.user_avatar),
+                    opponent_avatar: normalizeAvatar(row.opponent_avatar),
+                }));
+                fastify.log.info({ id, rows: normalized }, "MatchHistory query result");
+                reply.send({ success: true, matches: normalized });
 
             } catch (err: any) {
                 reply.code(500).send({ success: false, error: err.message });

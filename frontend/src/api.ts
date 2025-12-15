@@ -99,14 +99,14 @@ export const fetchUserMe = () => request("/user/me");
 
 export const getMatchHistory = (userId: number) =>
     request(`/user/${userId}/match-history`);
-/*
+
 // --- STATS ---
 export const getUserProfile = (userId: number) =>
   request(`/user/${userId}`);
 
 export const getLeaderboard = () => request("/stats/leaderboard");
 
-*/
+
 // --- TOURNAMENT ---
 export const createTournament = (data: any) =>
   request("/tournament", { method: "POST", body: JSON.stringify(data) });
