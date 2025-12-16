@@ -1,5 +1,8 @@
 import { FastifyInstance } from "fastify";
 import { blockchainService } from "../services/blockchain";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import { createDirectMatch, isMatchActive, matchHasPlayers, removeMatch } from "../ws/game";
 
 type DB = any;
 
@@ -25,6 +28,9 @@ async function ensureTournamentSchema(db: DB) {
   const names = cols.map((c: any) => c.name);
   if (!names.includes("WinnerAvatar")) {
     await db.run(`ALTER TABLE "Tournament" ADD COLUMN WinnerAvatar TEXT`);
+  }
+  if (!names.includes("mode")) {
+    await db.run(`ALTER TABLE "Tournament" ADD COLUMN mode TEXT DEFAULT 'online'`);
   }
 }
 
@@ -227,11 +233,16 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
 export default async function tournamentRoutes(fastify: FastifyInstance) {
   await ensureMatchSchema((fastify as any).db);
   await ensureTournamentSchema((fastify as any).db);
+  const tournamentReady: Map<number, Set<number>> = (fastify as any).tournamentReady || new Map();
+  (fastify as any).tournamentReady = tournamentReady;
+  // Map bracket match_id -> live game matchId (to let late listeners join)
+  const liveGameMatches: Map<number, number> = (fastify as any).tournamentLiveMatches || new Map();
+  (fastify as any).tournamentLiveMatches = liveGameMatches;
   // ----------------------------
   // Create new tournament
   // ----------------------------
   fastify.post("/tournament", async (req, reply) => {
-    const { name, max_players, admin_id, is_private, password } = req.body as any;
+    const { name, max_players, admin_id, is_private, password, mode } = req.body as any;
 
     if (!name || !admin_id) {
       return reply.status(400).send({ success: false, message: "Name and admin_id are required" });
@@ -239,9 +250,9 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
     try {
       const res = await fastify.db.run(
-        `INSERT INTO Tournament (name, max_players, is_private, password, admin_id)
-         VALUES (?, ?, ?, ?, ?)`,
-        [name, max_players ?? 8, is_private ?? 0, password ?? null, admin_id]
+        `INSERT INTO Tournament (name, max_players, is_private, password, admin_id, mode)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [name, max_players ?? 8, is_private ?? 0, password ?? null, admin_id, mode === "offline" ? "offline" : "online"]
       );
 
       reply.send({ success: true, tournament_id: res.lastID });
@@ -261,6 +272,21 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     }
 
     try {
+      const tournament = await fastify.db.get(`SELECT status FROM Tournament WHERE tournament_id = ?`, [tournament_id]);
+      if (!tournament) return reply.status(404).send({ success: false, message: "Tournament not found" });
+      if (tournament.status === "finished") {
+        return reply.status(400).send({ success: false, message: "Tournament already finished" });
+      }
+
+      const exists = await fastify.db.get(
+        `SELECT 1 FROM Player WHERE tournament_id = ? AND user_id = ?`,
+        [tournament_id, user_id]
+      );
+      if (exists) {
+        const cnt = await fastify.db.get(`SELECT COUNT(*) as cnt FROM Player WHERE tournament_id = ?`, [tournament_id]);
+        return reply.send({ success: true, player_count: cnt?.cnt ?? 0 });
+      }
+
       const count = await (fastify as any).db.get(
         `SELECT COUNT(*) as cnt FROM Player WHERE tournament_id = ?`,
         [tournament_id]
@@ -286,6 +312,79 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       }
 
       reply.send({ success: true, player_count: afterCount?.cnt ?? count?.cnt ?? 0 });
+    } catch (err) {
+      reply.status(500).send({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // ----------------------------
+  // Join tournament using alias only (guest)
+  // ----------------------------
+  fastify.post("/tournament/join-alias", async (req, reply) => {
+    const { tournament_id, alias } = req.body as any;
+    const trimmed = (alias || "").trim();
+    if (!tournament_id || !trimmed) {
+      return reply.status(400).send({ success: false, message: "tournament_id and alias are required" });
+    }
+
+    try {
+      const tournament = await fastify.db.get(`SELECT status FROM Tournament WHERE tournament_id = ?`, [tournament_id]);
+      if (!tournament) return reply.status(404).send({ success: false, message: "Tournament not found" });
+      if (tournament.status === "finished") {
+        return reply.status(400).send({ success: false, message: "Tournament already finished" });
+      }
+
+      const exists = await fastify.db.get(
+        `SELECT 1 FROM Player WHERE tournament_id = ? AND nickname = ?`,
+        [tournament_id, trimmed]
+      );
+      if (exists) {
+        const cnt = await fastify.db.get(`SELECT COUNT(*) as cnt FROM Player WHERE tournament_id = ?`, [tournament_id]);
+        return reply.send({ success: true, player_count: cnt?.cnt ?? 0 });
+      }
+
+      const count = await fastify.db.get(
+        `SELECT COUNT(*) as cnt FROM Player WHERE tournament_id = ?`,
+        [tournament_id]
+      );
+      if (count?.cnt >= 8) {
+        return reply.status(400).send({ success: false, message: "Tournament is already full (8 players)" });
+      }
+
+      // Create a lightweight guest user
+      const base = trimmed.replace(/\s+/g, "_").toLowerCase().slice(0, 20) || "guest";
+      let username = base;
+      let suffix = 1;
+      while (await fastify.db.get(`SELECT 1 FROM User WHERE username = ?`, [username])) {
+        username = `${base}_${suffix++}`;
+      }
+      const email = `${username}.${Date.now()}@guest.local`;
+      const password = crypto.randomBytes(10).toString("hex");
+      const hashed = await bcrypt.hash(password, 10);
+
+      const userRes = await fastify.db.run(
+        "INSERT INTO User (username, email, password) VALUES (?, ?, ?)",
+        [username, email, hashed]
+      );
+      const userId = userRes.lastID;
+      await fastify.db.run("INSERT INTO UserStats (user_id) VALUES (?)", [userId]);
+
+      await fastify.db.run(
+        `INSERT INTO Player (user_id, tournament_id, nickname)
+         VALUES (?, ?, ?)`,
+        [userId, tournament_id, trimmed]
+      );
+
+      const afterCount = await fastify.db.get(
+        `SELECT COUNT(*) as cnt FROM Player WHERE tournament_id = ?`,
+        [tournament_id]
+      );
+
+      if (afterCount?.cnt === 8) {
+        await generateQuarterBracket((fastify as any).db, tournament_id);
+      }
+
+      reply.send({ success: true, player_count: afterCount?.cnt ?? count?.cnt ?? 0, user_id: userId });
     } catch (err) {
       reply.status(500).send({ success: false, error: (err as Error).message });
     }
@@ -321,15 +420,20 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
 
       if (!tournament) return reply.status(404).send({ success: false, message: "Tournament not found" });
 
+      const onlineUsers = tournament.mode === "online" ? (fastify as any).onlineUsers as Map<number, string> | undefined : undefined;
       const players = await fastify.db.all(
-        `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username
+        `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username, u.avatar
          FROM Player p
          JOIN User u ON p.user_id = u.id
          WHERE p.tournament_id = ?`,
         [id]
       );
+      const enriched = players.map((p: any) => ({
+        ...p,
+        online: onlineUsers ? onlineUsers.has(p.user_id) : false,
+      }));
 
-      reply.send({ ...tournament, players });
+      reply.send({ ...tournament, players: enriched });
     } catch (err) {
       reply.status(500).send({ success: false, error: (err as Error).message });
     }
@@ -341,14 +445,132 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
   fastify.get("/tournament/:id/players", async (req, reply) => {
     const { id } = req.params as any;
     try {
+      const onlineUsers = (fastify as any).onlineUsers as Map<number, string> | undefined;
       const players = await fastify.db.all(
-        `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username
+        `SELECT p.user_id, p.nickname, p.elo, p.rank, u.username, u.avatar
          FROM Player p
          JOIN User u ON p.user_id = u.id
          WHERE p.tournament_id = ?`,
         [id]
       );
-      reply.send(players);
+      const enriched = players.map((p: any) => ({
+        ...p,
+        online: onlineUsers ? onlineUsers.has(p.user_id) : false,
+      }));
+      reply.send(enriched);
+    } catch (err) {
+      reply.status(500).send({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // ----------------------------
+  // Leave tournament
+  // ----------------------------
+  fastify.post("/tournament/:id/leave", async (req, reply) => {
+    const { id } = req.params as any;
+    const { user_id } = req.body as any;
+    if (!user_id) return reply.status(400).send({ success: false, message: "user_id is required" });
+    try {
+      await fastify.db.run(`DELETE FROM Player WHERE tournament_id = ? AND user_id = ?`, [id, user_id]);
+      reply.send({ success: true });
+    } catch (err) {
+      reply.status(500).send({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // ----------------------------
+  // Player ready for upcoming match (online)
+  // ----------------------------
+  fastify.post("/tournament/:id/match/:matchId/ready", async (req, reply) => {
+    const { id, matchId } = req.params as any;
+    const { user_id } = req.body as any;
+    if (!user_id) return reply.status(400).send({ success: false, message: "user_id is required" });
+
+    const onlineUsers = (fastify as any).onlineUsers as Map<number, string> | undefined;
+    const io = (fastify as any).io;
+    const readyMap: Map<number, Set<number>> = (fastify as any).tournamentReady;
+    const liveMap: Map<number, number> = (fastify as any).tournamentLiveMatches;
+
+    try {
+      const matchIdNum = Number(matchId);
+      const tournamentIdNum = Number(id);
+      const tournament = await fastify.db.get(`SELECT mode FROM Tournament WHERE tournament_id = ?`, [id]);
+      if (!tournament) return reply.status(404).send({ success: false, message: "Tournament not found" });
+      if (tournament.mode === "offline") {
+        return reply.status(400).send({ success: false, message: "This tournament is offline-only" });
+      }
+      const match = await fastify.db.get(
+        `SELECT m.*, p1.user_id as u1, p2.user_id as u2
+         FROM Match m
+         LEFT JOIN Player p1 ON m.player1 = p1.player_id
+         LEFT JOIN Player p2 ON m.player2 = p2.player_id
+         WHERE m.match_id = ? AND m.tournament_id = ?`,
+        [matchIdNum, tournamentIdNum]
+      );
+      if (!match) return reply.status(404).send({ success: false, message: "Match not found" });
+      const participants = [Number(match.u1), Number(match.u2)].filter((v) => Number.isFinite(v));
+      const requester = Number(user_id);
+      if (!participants.includes(requester)) {
+        return reply.status(403).send({ success: false, message: "User not in this match" });
+      }
+      if (!onlineUsers?.has(requester)) {
+        return reply.status(400).send({ success: false, message: "User must be online" });
+      }
+
+      // If a live match exists but is stale or wrong, discard it
+      const existingLive = liveMap.get(matchIdNum);
+      if (existingLive) {
+        const active = isMatchActive(existingLive);
+        const correctPlayers = matchHasPlayers(existingLive, participants);
+        if (!active || !correctPlayers) {
+          removeMatch(existingLive);
+          liveMap.delete(matchIdNum);
+        }
+      }
+
+      // If match already launched and still valid, return existing gameMatchId so client can join without refresh
+      if (liveMap.has(matchIdNum)) {
+        return reply.send({ success: true, status: "starting", gameMatchId: liveMap.get(matchIdNum) });
+      }
+
+      if (!readyMap.has(matchIdNum)) readyMap.set(matchIdNum, new Set());
+      readyMap.get(matchIdNum)!.add(requester);
+
+      // Notify both players about readiness update
+      for (const uid of participants) {
+        const sid = onlineUsers?.get(uid);
+        if (sid) {
+          io.to(sid).emit("tournament:ready", { tournamentId: tournamentIdNum, matchId: matchIdNum, readyIds: Array.from(readyMap.get(matchIdNum)!) });
+        }
+      }
+
+      const allReady = participants.every((uid: number) => readyMap.get(matchIdNum)!.has(uid));
+      if (!allReady) {
+        return reply.send({ success: true, status: "waiting", ready: Array.from(readyMap.get(matchIdNum)!) });
+      }
+
+      // Both ready: create direct match for online play
+      const mode: 2 | 4 = 2;
+      const staleLive = liveMap.get(matchIdNum);
+      if (staleLive) {
+        removeMatch(staleLive);
+      }
+      const matchIdGame = createDirectMatch([match.u1, match.u2], mode);
+      readyMap.delete(matchIdNum);
+      liveMap.set(matchIdNum, matchIdGame);
+
+      for (const uid of participants) {
+        const sid = onlineUsers?.get(uid);
+        if (sid) {
+          io.to(sid).emit("tournament:match:start", {
+            tournamentId: tournamentIdNum,
+            bracketMatchId: matchIdNum,
+            gameMatchId: matchIdGame,
+          });
+        }
+      }
+
+      reply.send({ success: true, status: "starting", gameMatchId: matchIdGame });
     } catch (err) {
       reply.status(500).send({ success: false, error: (err as Error).message });
     }
@@ -362,6 +584,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     try {
       await ensureMatchSchema((fastify as any).db);
 
+      const onlineUsers = (fastify as any).onlineUsers as Map<number, string> | undefined;
       const tournament = await fastify.db.get(
         `SELECT t.*, 
          (SELECT COUNT(*) FROM Player WHERE tournament_id = t.tournament_id) as player_count
@@ -370,7 +593,11 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       );
       if (!tournament) return reply.status(404).send({ success: false, message: "Tournament not found" });
 
-      const players = await fetchTournamentPlayers((fastify as any).db, Number(id));
+      const playersRaw = await fetchTournamentPlayers((fastify as any).db, Number(id));
+      const players = playersRaw.map((p: any) => ({
+        ...p,
+        online: onlineUsers ? onlineUsers.has(p.user_id) : false,
+      }));
 
       const matches = await fastify.db.all(
         `SELECT 
@@ -474,6 +701,8 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       }
 
       await progressBracket(fastify, tournamentId);
+      const liveMap: Map<number, number> = (fastify as any).tournamentLiveMatches;
+      liveMap?.delete(matchIdNum);
 
       const bracket = await fastify.inject({
         method: "GET",

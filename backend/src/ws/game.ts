@@ -22,6 +22,9 @@ interface Match {
     ready: Set<number>;
     started: boolean;
     countdownTimer?: NodeJS.Timeout | null;
+    paused?: boolean;
+    idleTimeout?: NodeJS.Timeout | null;
+    readyGraceTimer?: NodeJS.Timeout | null;
 }
 
 interface GameState2P {
@@ -73,6 +76,8 @@ function createMatch(matchId: number, mode: 2 | 4, players: number[]) {
         ready: new Set(),
         started: false,
         countdownTimer: null,
+        paused: false,
+        idleTimeout: null,
     };
     matches.set(matchId, match);
     return match;
@@ -83,6 +88,30 @@ function launchBall(ball: BallState) {
     ball.y = fresh.y;
     ball.vx = fresh.vx;
     ball.vy = fresh.vy;
+}
+
+// --------------------
+// Direct match creation (used by tournament)
+// --------------------
+export function createDirectMatch(players: number[], mode: 2 | 4 = 2) {
+    const matchId = Date.now();
+    createMatch(matchId, mode, players);
+    return matchId;
+}
+
+export function isMatchActive(matchId: number) {
+    return matches.has(matchId);
+}
+
+export function matchHasPlayers(matchId: number, players: number[]) {
+    const m = matches.get(matchId);
+    if (!m) return false;
+    if (m.players.length !== players.length) return false;
+    return players.every((p) => m.players.includes(p));
+}
+
+export function removeMatch(matchId: number) {
+    matches.delete(matchId);
 }
 
 // --------------------
@@ -112,6 +141,34 @@ function joinQuadQueue(userId: number): number {
         return matchId;
     }
     return -1;
+}
+
+function connectionCount(match: Match) {
+    return match.sockets.size + match.ioSockets.size;
+}
+
+function scheduleIdleCleanup(match: Match, delayMs = 180000) {
+    if (match.idleTimeout) {
+        clearTimeout(match.idleTimeout);
+        match.idleTimeout = null;
+    }
+    match.idleTimeout = setTimeout(() => {
+        matches.delete(match.matchId);
+    }, delayMs);
+}
+
+function clearIdleCleanup(match: Match) {
+    if (match.idleTimeout) {
+        clearTimeout(match.idleTimeout);
+        match.idleTimeout = null;
+    }
+}
+
+function clearReadyGrace(match: Match) {
+    if (match.readyGraceTimer) {
+        clearTimeout(match.readyGraceTimer);
+        match.readyGraceTimer = null;
+    }
 }
 
 // --------------------
@@ -165,6 +222,7 @@ export function setupGameWS(fastify: FastifyInstance) {
                 }
 
                 match.sockets.set(playerId, socket);
+                clearIdleCleanup(match);
                 socket.send(JSON.stringify({
                     type: "state",
                     state: match.state,
@@ -200,7 +258,24 @@ export function setupGameWS(fastify: FastifyInstance) {
                 if (data.type === "ready" && match && effectivePlayerId != null) {
                     match.ready.add(effectivePlayerId);
                     broadcastReady(match);
-                    tryStartCountdown(match);
+                    if (match.paused) {
+                        if (match.ready.size === match.players.length) {
+                            match.paused = false;
+                            clearReadyGrace(match);
+                            broadcast(match, { type: "resume" });
+                        }
+                    } else {
+                        clearReadyGrace(match);
+                        if (match.ready.size < match.players.length && connectionCount(match) === match.players.length) {
+                            match.readyGraceTimer = setTimeout(() => {
+                                match.players.forEach((p) => match.ready.add(p));
+                                broadcastReady(match);
+                                tryStartCountdown(match);
+                            }, 4000);
+                        } else {
+                            tryStartCountdown(match);
+                        }
+                    }
                 return;
             }
 
@@ -221,12 +296,16 @@ export function setupGameWS(fastify: FastifyInstance) {
             socket.on("close", () => {
                 if (match && effectivePlayerId != null) {
                     match.sockets.delete(effectivePlayerId);
-                    match.ready.delete(effectivePlayerId);
+                    match.ready.clear();
                     stopCountdown(match);
                     broadcastReady(match);
-                    // If everyone left, clean up match. Otherwise keep it alive to avoid early disconnect messages.
-                    if (match.sockets.size === 0) {
-                        matches.delete(match.matchId);
+                    const remaining = connectionCount(match);
+                    if (remaining < match.players.length) {
+                        match.paused = true;
+                        broadcast(match, { type: "pause", reason: "disconnected" });
+                    }
+                    if (remaining === 0) {
+                        scheduleIdleCleanup(match);
                     }
                 }
             });
@@ -267,6 +346,7 @@ export function setupGameWS(fastify: FastifyInstance) {
 
             match.names[userId] = username;
             match.ioSockets.set(userId, socket);
+            clearIdleCleanup(match);
             const index = match.players.indexOf(userId) + 1;
             socket.emit("identify", { index });
             socket.emit("state", {
@@ -300,16 +380,38 @@ export function setupGameWS(fastify: FastifyInstance) {
             socket.on("ready", () => {
                 match.ready.add(userId);
                 broadcastReady(match);
-                tryStartCountdown(match);
+                if (match.paused) {
+                    if (match.ready.size === match.players.length) {
+                        match.paused = false;
+                        clearReadyGrace(match);
+                        broadcast(match, { type: "resume" });
+                    }
+                } else {
+                    clearReadyGrace(match);
+                    if (match.ready.size < match.players.length && connectionCount(match) === match.players.length) {
+                        match.readyGraceTimer = setTimeout(() => {
+                            match.players.forEach((p) => match.ready.add(p));
+                            broadcastReady(match);
+                            tryStartCountdown(match);
+                        }, 4000);
+                    } else {
+                        tryStartCountdown(match);
+                    }
+                }
             });
 
             socket.on("disconnect", () => {
                 match.ioSockets.delete(userId);
-                match.ready.delete(userId);
+                match.ready.clear();
                 stopCountdown(match);
                 broadcastReady(match);
-                if (match.ioSockets.size === 0 && match.sockets.size === 0) {
-                    matches.delete(match.matchId);
+                const remaining = connectionCount(match);
+                if (remaining < match.players.length) {
+                    match.paused = true;
+                    broadcast(match, { type: "pause", reason: "disconnected" });
+                }
+                if (remaining === 0) {
+                    scheduleIdleCleanup(match);
                 }
             });
         });
@@ -540,6 +642,9 @@ function handleScore(match: Match, scorerKey: string) {
 }
 
 function stepPhysics(match: Match) {
+    if (match.paused) {
+        return;
+    }
     if (!match.started) {
         broadcast(match, {
             type: "state",

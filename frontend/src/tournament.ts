@@ -3,9 +3,13 @@ import {
     fetchTournamentBracket,
     fetchTournaments,
     joinTournament,
+    joinTournamentAlias,
+    leaveTournament,
+    readyTournamentMatch,
     reportTournamentResult,
 } from "./api";
 import { showGame } from "./pong";
+import { io, Socket } from "socket.io-client";
 
 type PlayerLight = {
     id: number;
@@ -59,8 +63,11 @@ function findNextMatch(rounds: { quarter: MatchLight[]; semi: MatchLight[]; fina
 
 export async function showTournament(container: HTMLElement) {
     const me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
+    const myId = me?.id ? Number(me.id) : null;
     const storedId = sessionStorage.getItem("activeTournamentId") || localStorage.getItem("activeTournamentId");
     let activeId: number | undefined = storedId ? Number(storedId) : undefined;
+    const socket: Socket | null = (window as any).appSocket || null;
+    let socketListenersAttached = false;
 
     async function loadAndRender() {
         container.innerHTML = `<div class="text-gray-500">Loading tournaments...</div>`;
@@ -97,10 +104,17 @@ export async function showTournament(container: HTMLElement) {
         const rounds = bracketData.rounds as { quarter: MatchLight[]; semi: MatchLight[]; final: MatchLight[] };
         const nextMatch = findNextMatch(rounds);
 
-        const tournament = bracketData.tournament;
-        const players = bracketData.players || [];
-            const isInTournament = players.some((p: any) => p.user_id === me?.id);
+            const tournament = bracketData.tournament;
+            const players = bracketData.players || [];
+            const nextPlayers = nextMatch
+                ? [Number(nextMatch.match.player1?.user_id), Number(nextMatch.match.player2?.user_id)].filter((n) =>
+                      Number.isFinite(n)
+                  )
+                : [];
+            const isOnlineMode = (tournament.mode || "online") === "online";
+            const isInTournament = myId !== null && players.some((p: any) => Number(p.user_id) === myId);
             const canJoin = tournament.status !== "finished" && tournament.player_count < 8 && !isInTournament;
+            const joinable = tournament.status !== "finished" && tournament.player_count < 8;
 
             const optionsHtml = tournaments
                 .map(
@@ -115,13 +129,19 @@ export async function showTournament(container: HTMLElement) {
                         <div>
                             <p class="text-xs text-gray-400">Tournament ID #${tournament.tournament_id}</p>
                             <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">${tournament.name}</h1>
-                            <p class="text-gray-500">Status: <strong>${tournament.status}</strong> • Players ${tournament.player_count}/8</p>
+                            <p class="text-gray-500">Status: <strong>${tournament.status}</strong> • Mode: ${isOnlineMode ? "online" : "offline"} • Players ${tournament.player_count}/8</p>
                         </div>
-                        <div class="flex gap-2 items-center">
+                        <div class="flex gap-2 items-center flex-wrap">
                             <select id="tournamentSelector" class="border rounded px-2 py-1 text-sm">${optionsHtml}</select>
                             <button id="refreshBracket" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded">Refresh</button>
-                            ${canJoin ? `<button id="joinTournament" class="px-3 py-1 bg-blue-600 text-white rounded">Join</button>` : ""}
+                            ${joinable ? `<button id="joinTournament" class="px-3 py-1 bg-blue-600 text-white rounded">Join with alias or account</button>` : ""}
+                            ${isInTournament ? `<button id="leaveTournament" class="px-3 py-1 bg-red-600 text-white rounded">Leave</button>` : ""}
                             <button id="newTournament" class="px-3 py-1 bg-indigo-600 text-white rounded">New tournament</button>
+                            ${!isOnlineMode ? `
+                                <input id="aliasInputBracket" type="text" placeholder="Alias to join" class="border px-2 py-1 rounded text-sm" />
+                                <input id="aliasCountBracket" type="number" min="1" max="8" value="1" class="border px-2 py-1 rounded text-sm w-20" title="How many aliases to add"/>
+                                <button id="addAliasBatch" class="px-3 py-1 bg-emerald-600 text-white rounded text-sm">Add aliases</button>
+                            ` : ``}
                         </div>
                     </div>
 
@@ -135,7 +155,10 @@ export async function showTournament(container: HTMLElement) {
                                         `<li class="flex items-center gap-2">
                                             <span class="text-gray-400">${idx + 1}.</span>
                                             <img src="${p.avatar || "/uploads/default.png"}" class="w-6 h-6 rounded-full object-cover border" />
-                                            ${p.displayName || p.username || p.name || `Player ${p.player_id}`}
+                                            <span class="flex items-center gap-1">
+                                                ${p.displayName || p.username || p.name || `Player ${p.player_id}`}
+                                                ${p.online ? `<span class="w-2 h-2 rounded-full bg-green-500 inline-block" title="Online"></span>` : `<span class="w-2 h-2 rounded-full bg-gray-400 inline-block" title="Offline"></span>`}
+                                            </span>
                                         </li>`
                                 )
                                 .join("")}
@@ -171,24 +194,43 @@ export async function showTournament(container: HTMLElement) {
                     </div>
 
                     <div class="bg-white dark:bg-gray-800 p-4 rounded shadow">
-                        ${
-                            tournament.status === "finished" && bracketData.tournament.WinnerName
-                                ? `<div class="flex items-center gap-2 text-green-600 font-semibold">
+                    ${
+                        tournament.status === "finished" && bracketData.tournament.WinnerName
+                            ? `<div class="flex items-center gap-2 text-green-600 font-semibold">
                                         <img src="${bracketData.tournament.WinnerAvatar || "/uploads/default.png"}" class="w-8 h-8 rounded-full object-cover border" />
                                         <span>Winner: ${bracketData.tournament.WinnerName}</span>
                                    </div>`
-                                : nextMatch
-                                ? `<div class="flex items-center justify-between">
+                            : nextMatch
+                            ? `<div class="flex flex-col gap-3">
+                                <div class="flex items-center justify-between">
                                     <div class="text-gray-700 dark:text-gray-200">
                                         <p class="font-semibold">Next match (${nextMatch.round})</p>
                                         <p class="text-sm">${nextMatch.match.player1?.name || "TBD"} vs ${nextMatch.match.player2?.name || "TBD"}</p>
+                                        <p class="text-xs text-gray-500">Players must be online and ready to start online.</p>
                                     </div>
-                                    <button id="startMatch" class="px-4 py-2 bg-green-600 text-white rounded">Play locally</button>
-                                   </div>`
-                                : tournament.player_count < 8
-                                ? `<p class="text-gray-500 text-sm">Waiting for players to reach 8 to seed the bracket.</p>`
-                                : `<p class="text-gray-500 text-sm">Bracket is complete.</p>`
-                        }
+                                        <div class="flex gap-2">
+                                        ${isOnlineMode ? `<div class="flex gap-2">
+                                            <button id="readyOnline" class="px-4 py-2 bg-blue-600 text-white rounded">Ready & notify</button>
+                                            <button id="resumeOnline" class="px-4 py-2 bg-amber-500 text-white rounded">Resume match</button>
+                                        </div>` : ""}
+                                        ${!isOnlineMode ? `<button id="startMatch" class="px-4 py-2 bg-green-600 text-white rounded">Play locally</button>` : ""}
+                                    </div>
+                                </div>
+                                <div class="text-sm">
+                                    <span class="inline-flex items-center gap-1 mr-3">
+                                        <span class="${nextMatch.match.player1?.online ? "bg-green-500" : "bg-gray-400"} w-2 h-2 rounded-full"></span>
+                                        ${nextMatch.match.player1?.name || "TBD"}
+                                    </span>
+                                    <span class="inline-flex items-center gap-1">
+                                        <span class="${nextMatch.match.player2?.online ? "bg-green-500" : "bg-gray-400"} w-2 h-2 rounded-full"></span>
+                                        ${nextMatch.match.player2?.name || "TBD"}
+                                    </span>
+                                </div>
+                               </div>`
+                            : tournament.player_count < 8
+                            ? `<p class="text-gray-500 text-sm">Waiting for players to reach 8 to seed the bracket.</p>`
+                            : `<p class="text-gray-500 text-sm">Bracket is complete.</p>`
+                    }
                     </div>
                 </div>
             `;
@@ -214,34 +256,190 @@ export async function showTournament(container: HTMLElement) {
                 activeId = res.tournament_id;
                 sessionStorage.setItem("activeTournamentId", String(activeId));
                 localStorage.setItem("activeTournamentId", String(activeId));
+                const aliasInput = document.getElementById("aliasInputBracket") as HTMLInputElement | null;
+                if (aliasInput) aliasInput.value = "";
                 await loadAndRender();
             } catch (err: any) {
                 alert(err?.message || "Failed to create tournament");
             }
         });
 
-        if (canJoin) {
+        if (joinable) {
             document.getElementById("joinTournament")?.addEventListener("click", async () => {
+                const alias = (document.getElementById("aliasInputBracket") as HTMLInputElement)?.value.trim();
                 try {
-                    await joinTournament({
-                        tournament_id: tournament.tournament_id,
-                        user_id: me.id,
-                        nickname: me.username,
-                    });
-                    loadAndRender();
+                    if (alias) {
+                        await joinTournamentAlias({ tournament_id: tournament.tournament_id, alias });
+                    } else if (myId) {
+                        await joinTournament({
+                            tournament_id: tournament.tournament_id,
+                            user_id: myId,
+                            nickname: me.username,
+                        });
+                    } else {
+                        alert("Please enter an alias to join.");
+                        return;
+                    }
+                    await loadAndRender();
                 } catch (err: any) {
                     alert(err.message || "Unable to join tournament");
                 }
             });
         }
 
+        if (!isOnlineMode) {
+            document.getElementById("addAliasBatch")?.addEventListener("click", async () => {
+                const aliasInput = document.getElementById("aliasInputBracket") as HTMLInputElement | null;
+                const countInput = document.getElementById("aliasCountBracket") as HTMLInputElement | null;
+                const baseAlias = aliasInput?.value.trim();
+                const count = Math.min(8, Math.max(1, Number(countInput?.value || 1)));
+            if (!baseAlias) {
+                alert("Please enter an alias base.");
+                return;
+            }
+                try {
+                    for (let i = 0; i < count; i++) {
+                        const alias = i === 0 ? baseAlias : `${baseAlias}_${i + 1}`;
+                        await joinTournamentAlias({ tournament_id: tournament.tournament_id, alias });
+                    }
+                    await loadAndRender();
+                } catch (err: any) {
+                    alert(err.message || "Failed to add aliases");
+                }
+            });
+        }
+
+        if (isInTournament) {
+            document.getElementById("leaveTournament")?.addEventListener("click", async () => {
+                if (!myId) return;
+                try {
+                    await leaveTournament(tournament.tournament_id, myId);
+                    await loadAndRender();
+                } catch (err: any) {
+                    alert(err.message || "Unable to leave tournament");
+                }
+            });
+        }
+
         if (nextMatch) {
-            document.getElementById("startMatch")?.addEventListener("click", async () => {
-                const match = nextMatch.match;
-                const labels = {
-                    p1: match.player1?.name || match.player1?.displayName || "P1",
-                    p2: match.player2?.name || match.player2?.displayName || "P2",
+            const match = nextMatch.match;
+            const labels = {
+                p1: match.player1?.name || match.player1?.displayName || "P1",
+                p2: match.player2?.name || match.player2?.displayName || "P2",
+            };
+
+            if (isOnlineMode && isInTournament) {
+                let pollTimer: number | null = null;
+
+                const startPollingForMatch = () => {
+                    let attempts = 0;
+                    const maxAttempts = 5;
+                    const poll = async () => {
+                        attempts += 1;
+                        try {
+                            const res = await readyTournamentMatch(tournament.tournament_id, match.match_id, myId!);
+                            if (res?.gameMatchId) {
+                                if (pollTimer) {
+                                    window.clearInterval(pollTimer);
+                                    pollTimer = null;
+                                }
+                                await launchMatch(res.gameMatchId);
+                            }
+                        } catch (err) {
+                            console.warn("Polling ready failed", err);
+                        }
+                        if (attempts >= maxAttempts && pollTimer) {
+                            window.clearInterval(pollTimer);
+                            pollTimer = null;
+                        }
+                    };
+                    pollTimer = window.setInterval(poll, 1200);
                 };
+
+                const launchMatch = async (gameMatchId: number) => {
+                    const p1Id = match.player1?.id || match.player1?.user_id;
+                    const p2Id = match.player2?.id || match.player2?.user_id;
+                    await showGame(container, "duo", {
+                        playerLabels: labels,
+                        matchId: gameMatchId,
+                        onEnd: async (result) => {
+                            const winnerKey = result.winner;
+                            const scores = result.scores || {};
+                            let winnerId =
+                                winnerKey === "p1"
+                                    ? p1Id
+                                    : winnerKey === "p2"
+                                    ? p2Id
+                                    : undefined;
+                            if (!winnerId) {
+                                const s1 = scores.p1 ?? 0;
+                                const s2 = scores.p2 ?? 0;
+                                winnerId = s1 >= s2 ? p1Id : p2Id;
+                            }
+                            if (winnerId) {
+                                await reportTournamentResult(tournament.tournament_id, match.match_id, Number(winnerId), scores);
+                                await loadAndRender();
+                            }
+                        },
+                    });
+                };
+
+                document.getElementById("readyOnline")?.addEventListener("click", async () => {
+                    if (!myId) {
+                        alert("You must be logged in to be marked ready online.");
+                        return;
+                    }
+                    if (!nextPlayers.includes(myId)) {
+                        alert("Only players in the next match can ready up.");
+                        return;
+                    }
+                    try {
+                        // One-time listener for match start (in case this client doesn't get gameMatchId directly)
+                        const startHandler = async (payload: any) => {
+                            if (!payload?.gameMatchId || payload?.bracketMatchId !== match.match_id) return;
+                            socket?.off("tournament:match:start", startHandler);
+                            await launchMatch(payload.gameMatchId);
+                        };
+                        socket?.on("tournament:match:start", startHandler);
+
+                        const res = await readyTournamentMatch(tournament.tournament_id, match.match_id, myId);
+                        if (socket) {
+                            socket.emit("joinMatchChat", match.match_id);
+                        }
+                        // If backend already started a game match, auto-join it
+                        if (res?.gameMatchId) {
+                            socket?.off("tournament:match:start", startHandler);
+                            await launchMatch(res.gameMatchId);
+                        } else {
+                            alert("Marked ready. Waiting for the other player.");
+                            startPollingForMatch();
+                        }
+                    } catch (err: any) {
+                        alert(err?.message || "Failed to mark ready. Ensure you are online.");
+                    }
+                });
+
+                document.getElementById("resumeOnline")?.addEventListener("click", async () => {
+                    if (!myId) {
+                        alert("You must be logged in to resume.");
+                        return;
+                    }
+                    try {
+                        const res = await readyTournamentMatch(tournament.tournament_id, match.match_id, myId);
+                        if (res?.gameMatchId) {
+                            await launchMatch(res.gameMatchId);
+                        } else {
+                            alert("No live match to resume yet. Click Ready instead.");
+                        }
+                    } catch (err: any) {
+                        alert(err?.message || "Failed to resume the match");
+                    }
+                });
+            }
+
+            document.getElementById("startMatch")?.addEventListener("click", async () => {
+                const p1Id = match.player1?.id || match.player1?.user_id;
+                const p2Id = match.player2?.id || match.player2?.user_id;
                 await showGame(container, "local-duo", {
                     playerLabels: labels,
                     onEnd: async (res) => {
@@ -249,15 +447,15 @@ export async function showTournament(container: HTMLElement) {
                         const scores = res.scores || {};
                         let winnerId =
                             winnerKey === "p1"
-                                ? match.player1?.id || match.player1?.user_id
+                                ? p1Id
                                 : winnerKey === "p2"
-                                ? match.player2?.id || match.player2?.user_id
+                                ? p2Id
                                 : undefined;
 
                         if (!winnerId) {
                             const p1Score = scores.p1 ?? 0;
                             const p2Score = scores.p2 ?? 0;
-                            winnerId = p1Score >= p2Score ? (match.player1?.id || match.player1?.user_id) : (match.player2?.id || match.player2?.user_id);
+                            winnerId = p1Score >= p2Score ? p1Id : p2Id;
                         }
 
                         if (!winnerId) return;
@@ -279,5 +477,65 @@ export async function showTournament(container: HTMLElement) {
         }
     }
 
+    // Attach socket listeners once to refresh presence and auto-start matches
+    function ensureSocketListeners() {
+        if (!socket || socketListenersAttached) return;
+        socketListenersAttached = true;
+        socket.on("user:online", () => {
+            const currentHash = window.location.hash;
+            if (currentHash === "#tournament") loadAndRender();
+        });
+        socket.on("user:offline", () => {
+            const currentHash = window.location.hash;
+            if (currentHash === "#tournament") loadAndRender();
+        });
+            socket.on("tournament:match:start", async (payload: any) => {
+                if (!payload || !payload.tournamentId || !payload.gameMatchId) return;
+                if (activeId && Number(payload.tournamentId) !== activeId) return;
+                if (!myId) return;
+                // Fetch bracket to confirm and get labels
+                try {
+                const bracketData = await fetchTournamentBracket(activeId || payload.tournamentId);
+                const match = [...(bracketData.rounds.quarter || []), ...(bracketData.rounds.semi || []), ...(bracketData.rounds.final || [])]
+                    .find((m: any) => m.match_id === payload.bracketMatchId);
+                if (!match) return;
+                const participantIds = [Number(match.player1?.user_id), Number(match.player2?.user_id)].filter((n) => Number.isFinite(n));
+                if (!participantIds.includes(myId)) return;
+                const labels = {
+                    p1: match.player1?.name || match.player1?.displayName || "P1",
+                    p2: match.player2?.name || match.player2?.displayName || "P2",
+                };
+                const p1Id = match.player1?.id || match.player1?.user_id;
+                const p2Id = match.player2?.id || match.player2?.user_id;
+                await showGame(container, "duo", {
+                    playerLabels: labels,
+                    matchId: payload.gameMatchId,
+                    onEnd: async (result) => {
+                        const winnerKey = result.winner;
+                        const scores = result.scores || {};
+                        let winnerId =
+                            winnerKey === "p1"
+                                ? p1Id
+                                : winnerKey === "p2"
+                                ? p2Id
+                                : undefined;
+                        if (!winnerId) {
+                            const s1 = scores.p1 ?? 0;
+                            const s2 = scores.p2 ?? 0;
+                            winnerId = s1 >= s2 ? p1Id : p2Id;
+                        }
+                        if (winnerId) {
+                            await reportTournamentResult(payload.tournamentId, match.match_id, Number(winnerId), scores);
+                            await loadAndRender();
+                        }
+                    },
+                });
+                } catch (err) {
+                    console.error("Failed to auto-start tournament match", err);
+                }
+            });
+        }
+
+    ensureSocketListeners();
     await loadAndRender();
 }

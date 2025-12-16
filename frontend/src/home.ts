@@ -21,12 +21,18 @@ export function showHome(app: HTMLElement) {
         </div>
 
       <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition">
-        <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">Join a Tournament</h2>
+        <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">Tournaments</h2>
         <p class="text-gray-500 dark:text-gray-400 mb-4">Compete in official events.</p>
-        <button id="viewtournamentBtn"
-                class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md">
-          View Tournaments
-        </button>
+        <div class="flex flex-col gap-3">
+            <button id="viewtournamentBtn"
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md">
+              View Tournaments
+            </button>
+            <button id="quickAliasTournamentBtn"
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
+              Start alias-only tournament
+            </button>
+        </div>
       </div>
       <div id="gameContainer" class="mt-8"></div>
     </div>

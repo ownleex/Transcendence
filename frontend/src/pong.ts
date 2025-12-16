@@ -4,6 +4,7 @@ export type GameMode = "duo" | "quad" | "local-duo" | "local-quad";
 type GameOptions = {
     playerLabels?: Record<string, string>;
     onEnd?: (payload: { winner?: string; scores: Record<string, number> }) => void;
+    matchId?: number;
 };
 
 type RemoteMode = "duo" | "quad";
@@ -48,18 +49,19 @@ const DEFAULT_CONFIG: GameConfig = {
     paddleSpeed: 5,
 };
 
-// --- Chat socket + état global match ---
+// --- Chat socket + global match state ---
 let chatSocket: Socket | null = null;
 let currentMatchId: number | null = null;
 
 /**
- * Affiche et lance une partie (duo ou quad) + chat de match.
+ * Renders and starts a game (duo or quad) with match chat.
  */
 export async function showGame(container: HTMLElement, mode: GameMode = "duo", options: GameOptions = {}) {
     const isLocal = mode.startsWith("local");
     const isQuad = mode === "quad" || mode === "local-quad";
     const remoteMode: RemoteMode = mode === "duo" || mode === "quad" ? mode : "duo";
     let nameLabels: Record<string, string> | undefined = options.playerLabels;
+    const returnHash = window.location.hash || "#home";
 
     currentMatchId = null;
     container.innerHTML = isLocal
@@ -68,9 +70,9 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
 
     const storedMe = sessionStorage.getItem("me") || localStorage.getItem("me") || "{}";
     const me = JSON.parse(storedMe);
-    const currentUserId = me.id;
+    const currentUserId = Number(me.id) || null;
 
-    // Modes locaux n'ont pas besoin d'être connectés
+    // Local modes do not require a logged user
     if (!isLocal && !currentUserId) {
         alert("User not logged in!");
         return;
@@ -82,7 +84,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         return;
     }
 
-    // Elements créés après matchmaking (pour éviter l'affichage prématuré)
+    // Elements created after matchmaking (avoid premature render)
     let overlay: HTMLDivElement | null = null;
     let wrapper!: HTMLDivElement;
     let canvas!: HTMLCanvasElement;
@@ -133,6 +135,8 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
     let matchStarted = isLocal;
     let isReady = isLocal;
     let myPaddleIndex: number | null = null;
+    let isPaused = false;
+    let matchEnded = false;
     const setStatus = (text: string) => {
         if (statusBox) statusBox.textContent = text;
     };
@@ -141,11 +145,26 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         isReady = true;
         if (readyButton) {
             readyButton.disabled = true;
-            readyButton.textContent = "Prêt";
+            readyButton.textContent = "Ready";
         }
-        setStatus("Prêt - en attente des autres joueurs");
+        setStatus("Ready - waiting for other players");
         if (gameSocket) {
             gameSocket.emit("ready");
+        }
+    };
+    let returnTriggered = false;
+    const handleReturn = () => {
+        if (returnTriggered) return;
+        returnTriggered = true;
+        teardown();
+        if (window.location.hash === returnHash) {
+            try {
+                window.dispatchEvent(new HashChangeEvent("hashchange"));
+            } catch {
+                window.location.hash = returnHash || "#home";
+            }
+        } else {
+            window.location.hash = returnHash || "#home";
         }
     };
 
@@ -153,42 +172,45 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
     // Remote matchmaking + WS
     // ---------------------------
     if (!isLocal) {
-        const joinUrl = remoteMode === "duo" ? "/api/join-duo" : "/api/join-quad";
-        const statusUrl = remoteMode === "duo" ? "/api/join-duo/status" : "/api/join-quad/status";
-        const cancelUrl = remoteMode === "duo" ? "/api/join-duo/cancel" : "/api/join-quad/cancel";
-
-        await fetch(joinUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: currentUserId }),
-        });
-
-        // Poll for match with timeout
-        let matchId: number | null = null;
-        const start = Date.now();
-        while (!matchId && Date.now() - start < 20000) {
-            const res = await fetch(`${statusUrl}?userId=${currentUserId}`);
-            const data = await res.json();
-            if (data.status === "matched") {
-                matchId = data.matchId;
-            } else {
-                await wait(1000);
-            }
-        }
+        let matchId: number | null = options.matchId ?? null;
 
         if (!matchId) {
-            await fetch(cancelUrl, {
+            const joinUrl = remoteMode === "duo" ? "/api/join-duo" : "/api/join-quad";
+            const statusUrl = remoteMode === "duo" ? "/api/join-duo/status" : "/api/join-quad/status";
+            const cancelUrl = remoteMode === "duo" ? "/api/join-duo/cancel" : "/api/join-quad/cancel";
+
+            await fetch(joinUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userId: currentUserId }),
             });
-            container.innerHTML = "<p class='text-red-500 text-center mt-8'>Matchmaking cancelled (timeout)</p>";
-            window.removeEventListener("keydown", keydownHandler);
-            window.removeEventListener("keyup", keyupHandler);
-            return;
+
+            // Poll for match with timeout
+            const start = Date.now();
+            while (!matchId && Date.now() - start < 20000) {
+                const res = await fetch(`${statusUrl}?userId=${currentUserId}`);
+                const data = await res.json();
+                if (data.status === "matched") {
+                    matchId = data.matchId;
+                } else {
+                    await wait(1000);
+                }
+            }
+
+            if (!matchId) {
+                await fetch(cancelUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userId: currentUserId }),
+                });
+                container.innerHTML = "<p class='text-red-500 text-center mt-8'>Matchmaking cancelled (timeout)</p>";
+                window.removeEventListener("keydown", keydownHandler);
+                window.removeEventListener("keyup", keyupHandler);
+                return;
+            }
         }
 
-        // Match trouvé, on construit maintenant l'UI fullscreen
+        // Match found, build full-screen UI
         ({
             overlay,
             wrapper,
@@ -205,7 +227,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
     
         if (!isLocal) {
             readyButton = document.createElement("button");
-            readyButton.textContent = "Je suis prêt";
+            readyButton.textContent = "I'm ready";
             readyButton.style.position = "absolute";
             readyButton.style.left = "50%";
             readyButton.style.bottom = "24px";
@@ -222,13 +244,15 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 sendReady();
             });
             wrapper.appendChild(readyButton);
-            setStatus('Match trouvé ! Appuie sur "Espace" ou clique sur "Je suis prêt" pour lancer le match.');
+            setStatus('Match found! Press "Space" or click "I’m ready" to launch.');
         }
 
-        gameSocket = io(`${window.location.origin}/game`, {
-            transports: ["polling"],
+        const useSecure = window.location.protocol === "https:";
+        gameSocket = io("/game", {
+            transports: ["polling", "websocket"],
             auth: { userId: currentUserId, matchId, token, username: me.username },
             withCredentials: true,
+            secure: useSecure,
         });
 
         gameSocket.on("connect_error", (err) => {
@@ -247,23 +271,22 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 canvas.height = config.height;
             }
 
-            // Mise à jour de la balle (toujours depuis le serveur)
+            // Ball updates come from server
             state.ball.x = msg.state.ball.x;
             state.ball.y = msg.state.ball.y;
             state.ball.vx = msg.state.ball.vx;
             state.ball.vy = msg.state.ball.vy;
 
-            // Réconciliation des paddles : ne pas écraser le paddle du joueur local
-            // (prédiction côté client), mais interpoler légèrement les autres joueurs
+            // Reconcile paddles: do not overwrite local paddle (client prediction); softly interpolate others
             const myPaddleKey = `p${myPaddleIndex}` as keyof PaddleState;
             const newPaddles = { ...state.paddles };
 
-            // Mettre à jour tous les paddles sauf le mien
+            // Update all paddles except mine
             (Object.keys(msg.state.paddles) as Array<keyof PaddleState>).forEach((key) => {
                 if (key !== myPaddleKey) {
                     const serverValue = msg.state.paddles[key] as number;
                     const currentValue = state.paddles[key] as number;
-                    // Interpolation douce pour éviter les saccades (20% vers la nouvelle position)
+                    // Soft interpolation to avoid jitter (20% toward server position)
                     newPaddles[key] = currentValue + (serverValue - currentValue) * 0.3 as any;
                 }
             });
@@ -279,17 +302,17 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 isReady = true;
                 if (readyButton) {
                     readyButton.disabled = true;
-                    readyButton.textContent = "Prêt";
+                    readyButton.textContent = "Ready";
                 }
             }
             if (msg?.total) {
-                setStatus(`Prêts: ${msg.readyCount ?? 0}/${msg.total}`);
+                setStatus(`Ready: ${msg.readyCount ?? 0}/${msg.total}`);
             }
         });
 
         gameSocket.on("countdown", (msg: any) => {
             matchStarted = false;
-            setStatus(`Départ dans ${msg.seconds}s`);
+            setStatus(`Starting in ${msg.seconds}s`);
             if (readyButton) readyButton.disabled = true;
         });
 
@@ -308,7 +331,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             setTimeout(() => setStatus(""), 1200);
         });
 
-        // Nouvel événement pour les mises à jour de la balle uniquement (60 FPS)
+        // Dedicated event for ball updates (60 FPS)
         gameSocket.on("ball", (msg: any) => {
             if (msg.ball) {
                 state.ball.x = msg.ball.x;
@@ -319,33 +342,56 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         });
 
         gameSocket.on("end", (msg: any) => {
+            if (matchEnded) return;
+            matchEnded = true;
             running = false;
             matchStarted = false;
             if (msg?.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
             renderScores(scoreBox, scores, isQuad, msg?.winner || "END", nameLabels || msg?.names);
             options.onEnd?.({ winner: msg?.winner, scores });
+            showReturnOverlay(handleReturn);
         });
 
-        // Envoi des mouvements avec prédiction côté client
+        gameSocket.on("pause", () => {
+            isPaused = true;
+            isReady = false;
+            setStatus("Opponent disconnected. Press Ready to resume when they return.");
+            if (readyButton) {
+                readyButton.style.display = "block";
+                readyButton.disabled = false;
+                readyButton.textContent = "I'm ready";
+            }
+        });
+
+        gameSocket.on("resume", () => {
+            isPaused = false;
+            setStatus("Opponent reconnected. Resuming...");
+            if (readyButton) {
+                readyButton.style.display = "none";
+            }
+            setTimeout(() => setStatus(""), 1500);
+        });
+
+        // Send paddle moves with client prediction
         paddleInterval = window.setInterval(() => {
             if (!gameSocket || !myPaddleIndex) return;
-            if (!matchStarted) return;
+            if (!matchStarted || isPaused) return;
             const payload: any = { type: "paddle" };
             const speed = config.paddleSpeed;
             const paddleLen = config.paddleLength;
 
-            // Helper pour clamper les valeurs
+            // Helper to keep paddle values within bounds
             const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
 
             let moved = false;
 
-            // Prédiction côté client : mise à jour locale IMMÉDIATE
+            // Client prediction: immediate local update
             if (myPaddleIndex === 1) {
                 let newValue = state.paddles.p1;
                 if (keys.has("w")) { newValue -= speed; moved = true; }
                 if (keys.has("s")) { newValue += speed; moved = true; }
                 if (moved) {
-                    // Clamp et mise à jour locale instantanée
+                    // Clamp and update locally
                     newValue = clamp(newValue, paddleLen / 2, config.height - paddleLen / 2);
                     state.paddles.p1 = newValue;
                     payload.value = newValue;
@@ -357,7 +403,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 if (keys.has("ArrowUp")) { newValue -= speed; moved = true; }
                 if (keys.has("ArrowDown")) { newValue += speed; moved = true; }
                 if (moved) {
-                    // Clamp et mise à jour locale instantanée
+                    // Clamp and update locally
                     newValue = clamp(newValue, paddleLen / 2, config.height - paddleLen / 2);
                     state.paddles.p2 = newValue;
                     payload.value = newValue;
@@ -369,7 +415,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 if (keys.has("a")) { newValue -= speed; moved = true; }
                 if (keys.has("d")) { newValue += speed; moved = true; }
                 if (moved) {
-                    // Clamp et mise à jour locale instantanée
+                    // Clamp and update locally
                     newValue = clamp(newValue, paddleLen / 2, config.width - paddleLen / 2);
                     state.paddles.p3 = newValue;
                     payload.value = newValue;
@@ -381,7 +427,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 if (keys.has("j")) { newValue -= speed; moved = true; }
                 if (keys.has("l")) { newValue += speed; moved = true; }
                 if (moved) {
-                    // Clamp et mise à jour locale instantanée
+                    // Clamp and update locally
                     newValue = clamp(newValue, paddleLen / 2, config.width - paddleLen / 2);
                     state.paddles.p4 = newValue;
                     payload.value = newValue;
@@ -389,7 +435,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 }
             }
 
-            // N'envoyer que si le joueur a bougé
+            // Only emit if the player moved
             if (payload.value !== undefined && moved) {
                 gameSocket.emit("paddle", payload);
             }
@@ -401,7 +447,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             setupChatForm(chatForm, chatInput);
         }
     }
-    // Modes locaux : on construit l'UI immédiatement
+    // Local modes: build UI immediately
     else {
         ({
             overlay,
@@ -428,11 +474,13 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
 
         if (isLocal) {
             stepLocal(state, scores, keys, config, isQuad, dt, () => {
+                if (matchEnded) return;
+                matchEnded = true;
                 running = false;
                 const winner = findLocalWinner(scores);
                 renderScores(scoreBox, scores, isQuad, winner, nameLabels);
                 options.onEnd?.({ winner, scores });
-                teardown();
+                showReturnOverlay(handleReturn);
             });
             renderScores(scoreBox, scores, isQuad, undefined, nameLabels);
         }
@@ -485,7 +533,7 @@ function stepLocal(
     onEnd: () => void
 ) {
     const speed = config.paddleSpeed;
-    // Input mapping local (tous joueurs au clavier)
+    // Input mapping for local keyboard players
     if (keys.has("w")) state.paddles.p1 -= speed;
     if (keys.has("s")) state.paddles.p1 += speed;
     if (keys.has("ArrowUp")) state.paddles.p2 -= speed;
@@ -779,14 +827,14 @@ function buildUI(
         chatInput = document.createElement("input");
         chatInput.id = "pong-chat-input";
         chatInput.type = "text";
-        chatInput.placeholder = "Tape ton message...";
+        chatInput.placeholder = "Type your message...";
         chatInput.autocomplete = "off";
         chatInput.style.flex = "1";
         chatInput.style.color = "#111";
 
         const btn = document.createElement("button");
         btn.type = "submit";
-        btn.textContent = "Envoyer";
+        btn.textContent = "Send";
         btn.style.background = "#22c55e";
         btn.style.color = "#fff";
         btn.style.padding = "6px 10px";
@@ -802,11 +850,99 @@ function buildUI(
     return { overlay, wrapper, canvas, ctx, scoreBox, statusBox, messagesList, chatForm, chatInput };
 }
 
+function showReturnOverlay(onReturn: () => void, delaySeconds: number = 5) {
+    const existing = document.getElementById("match-return-overlay");
+    existing?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "match-return-overlay";
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.background = "rgba(0,0,0,0.7)";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "70";
+
+    const box = document.createElement("div");
+    box.style.background = "#0f172a";
+    box.style.color = "#e5e7eb";
+    box.style.padding = "24px";
+    box.style.borderRadius = "12px";
+    box.style.boxShadow = "0 12px 30px rgba(0,0,0,0.35)";
+    box.style.textAlign = "center";
+    box.style.minWidth = "260px";
+
+    const title = document.createElement("h3");
+    title.textContent = "Match finished";
+    title.style.fontSize = "18px";
+    title.style.marginBottom = "8px";
+    title.style.fontWeight = "700";
+    box.appendChild(title);
+
+    const subtitle = document.createElement("p");
+    subtitle.textContent = "Great game! You will be sent back to the menu.";
+    subtitle.style.margin = "0 0 12px";
+    subtitle.style.fontSize = "14px";
+    subtitle.style.color = "#cbd5e1";
+    box.appendChild(subtitle);
+
+    const countdown = document.createElement("p");
+    countdown.style.margin = "0 0 16px";
+    countdown.style.fontWeight = "600";
+    countdown.style.color = "#e2e8f0";
+    box.appendChild(countdown);
+
+    let remaining = delaySeconds;
+    let timer: number | null = null;
+    let hardTimeout: number | null = null;
+    const deadline = Date.now() + delaySeconds * 1000;
+    const tick = () => {
+        remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        countdown.textContent = `Returning in ${remaining}s`;
+    };
+
+    const cleanup = () => {
+        if (timer !== null) {
+            window.clearInterval(timer);
+            timer = null;
+        }
+        if (hardTimeout !== null) {
+            window.clearTimeout(hardTimeout);
+            hardTimeout = null;
+        }
+        overlay.remove();
+        onReturn?.();
+    };
+
+    const btn = document.createElement("button");
+    btn.textContent = "Return to the menu";
+    btn.style.padding = "10px 16px";
+    btn.style.background = "#22c55e";
+    btn.style.color = "#0b1224";
+    btn.style.border = "none";
+    btn.style.borderRadius = "10px";
+    btn.style.fontWeight = "700";
+    btn.style.cursor = "pointer";
+    btn.addEventListener("click", () => cleanup());
+    box.appendChild(btn);
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    tick();
+    timer = window.setInterval(() => {
+        tick();
+        if (remaining <= 0) cleanup();
+    }, 1000);
+    hardTimeout = window.setTimeout(() => cleanup(), delaySeconds * 1000 + 200);
+}
+
 // ---------------------------
 // Chat helpers
 // ---------------------------
 function initMatchChat(matchId: number, messagesList: HTMLUListElement) {
-    // On évite les doublons
+    // Prevent duplicate sockets
     if (chatSocket) {
         chatSocket.disconnect();
         chatSocket = null;
@@ -815,7 +951,7 @@ function initMatchChat(matchId: number, messagesList: HTMLUListElement) {
     const token = localStorage.getItem("jwt") || sessionStorage.getItem("token");
     if (!token) {
         const li = document.createElement("li");
-        li.textContent = "Chat indisponible (pas de token)";
+        li.textContent = "Chat unavailable (no token)";
         messagesList.appendChild(li);
         return;
     }
@@ -841,7 +977,35 @@ function initMatchChat(matchId: number, messagesList: HTMLUListElement) {
         const li = document.createElement("li");
         const time = new Date(msg.at).toLocaleTimeString();
         const label = msg.fromUsername || `#${msg.from}`;
-        li.textContent = `[${time}] ${label}: ${msg.text}`;
+
+        const timeSpan = document.createElement("span");
+        timeSpan.textContent = `[${time}] `;
+        li.appendChild(timeSpan);
+
+        if (Number.isFinite(msg.from)) {
+            const link = document.createElement("button");
+            link.type = "button";
+            link.textContent = label;
+            link.style.color = "#a5b4fc";
+            link.style.textDecoration = "underline";
+            link.style.cursor = "pointer";
+            link.style.background = "transparent";
+            link.style.border = "none";
+            link.addEventListener("click", () => {
+                sessionStorage.setItem("profileUserId", String(msg.from));
+                window.location.hash = "#profile";
+            });
+            li.appendChild(link);
+        } else {
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = label;
+            li.appendChild(nameSpan);
+        }
+
+        const textSpan = document.createElement("span");
+        textSpan.textContent = `: ${msg.text}`;
+        li.appendChild(textSpan);
+
         messagesList.appendChild(li);
         messagesList.scrollTop = messagesList.scrollHeight;
     });

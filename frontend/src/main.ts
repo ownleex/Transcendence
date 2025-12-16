@@ -2,7 +2,7 @@
 import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
-import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, unblockFriend, getMatchHistory, fetchUserMe } from "./api";
+import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, unblockFriend, getMatchHistory, fetchUserMe, getUserProfile } from "./api";
 import { setup2FA, verify2FA, disable2FA } from "./api";
 import { io } from "socket.io-client";
 import { renderMatches } from "./matches";
@@ -42,7 +42,7 @@ async function ensureCurrentUser() {
 // -------------------------
 // Profile rendering (current user)
 // -------------------------
-function loadProfile() {
+async function loadProfile(userId?: number) {
     const usernameEl = document.getElementById("profile-username");
     const emailEl = document.getElementById("profile-email");
     const eloEl = document.getElementById("profile-elo");
@@ -50,21 +50,33 @@ function loadProfile() {
     const winrateEl = document.getElementById("profile-winrate");
     const avatarEl = document.getElementById("profile-avatar") as HTMLImageElement | null;
 
+    let profile = me;
+    if (Number.isFinite(userId) && userId !== me?.id) {
+        try {
+            const res = await getUserProfile(Number(userId));
+            if ((res as any)?.user) {
+                profile = (res as any).user;
+            }
+        } catch (err) {
+            console.warn("Failed to load user profile, falling back to current user:", err);
+        }
+    }
+
     const safe = (v: any, fallback: string = "—") => (v === null || v === undefined || v === "" ? fallback : v);
 
-    usernameEl && (usernameEl.textContent = safe(me.username));
-    emailEl && (emailEl.textContent = safe(me.email));
-    eloEl && (eloEl.textContent = safe(me.elo ?? me.rank ?? "—"));
-    matchesEl && (matchesEl.textContent = safe(me.matches_played ?? me.matches ?? "0"));
+    usernameEl && (usernameEl.textContent = safe(profile.username));
+    emailEl && (emailEl.textContent = safe(profile.email));
+    eloEl && (eloEl.textContent = safe(profile.elo ?? profile.rank ?? "—"));
+    matchesEl && (matchesEl.textContent = safe(profile.matches_played ?? profile.matches ?? "0"));
     if (winrateEl) {
         const wr =
-            me.winrate !== undefined && me.winrate !== null
-                ? `${Number(me.winrate).toFixed(1)}%`
+            profile.winrate !== undefined && profile.winrate !== null
+                ? `${Number(profile.winrate).toFixed(1)}%`
                 : "—";
         winrateEl.textContent = wr;
     }
-    if (avatarEl && me.avatar) {
-        avatarEl.src = me.avatar;
+    if (avatarEl && profile.avatar) {
+        avatarEl.src = profile.avatar;
     }
 }
 // ------------------------------
@@ -92,6 +104,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         const playQuadBtn = document.getElementById("playQuadBtn");
         const playQuadLocalBtn = document.getElementById("playQuadLocalBtn");
         const viewTournamentBtn = document.getElementById("viewtournamentBtn");   
+        const quickAliasTournamentBtn = document.getElementById("quickAliasTournamentBtn");
 
         playDuoBtn?.addEventListener("click", () => {
             showGame(gameContainer, "duo");
@@ -112,7 +125,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         // bouton "View Tournaments" dans les quick actions
         viewTournamentBtn?.addEventListener("click", () => {
             window.location.hash = "#tournament";
-        });        
+        });  
+        quickAliasTournamentBtn?.addEventListener("click", () => {
+            window.location.hash = "#tournament";
+        });      
     }
 
     // -------------------------
@@ -168,7 +184,10 @@ window.addEventListener("DOMContentLoaded", async () => {
             case "#profile":
                 document.getElementById("profile-panel")!.classList.remove("hidden");
                 await ensureCurrentUser();
-                loadProfile();
+                const profileTargetRaw = sessionStorage.getItem("profileUserId");
+                const profileTarget = profileTargetRaw ? Number(profileTargetRaw) : undefined;
+                await loadProfile(Number.isFinite(profileTarget) ? Number(profileTarget) : undefined);
+                sessionStorage.removeItem("profileUserId");
                 break;
 
             case "#auth":
@@ -244,7 +263,12 @@ function initSocket() {
     const token = localStorage.getItem("jwt");
     if (!token) return;
 
-    socket = io("https://saul-unsubpoenaed-lakeisha.ngrok-free.dev", { auth: { token } });
+    const socketUrl = (window as any).SOCKET_URL || window.location.origin;
+    socket = io(socketUrl, { auth: { token }, withCredentials: true });
+    (window as any).appSocket = socket;
+    socket.on("connect", () => {
+        console.log("[socket] Connected as", token);
+    });
 
     // Friend online/offline updates
     socket.on("user:online", ({ userId }: { userId: number }) => updateFriendStatus(userId, true));
