@@ -5,8 +5,6 @@ import { showTournament } from "./tournament";
 import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, unblockFriend, getMatchHistory, fetchUserMe } from "./api";
 import { setup2FA, verify2FA, disable2FA } from "./api";
 import { io } from "socket.io-client";
-import { renderRankings } from "./rankings";
-import { renderPlayers } from "./players";
 import { renderMatches } from "./matches";
 import { renderTournaments } from "./tournamentinfor";
 import { getLeaderboard } from "./api";
@@ -135,11 +133,6 @@ window.addEventListener("DOMContentLoaded", async () => {
                 showHome(app);
                 bindHomeButtons();
                 break;
-            case "#players":
-                await ensureCurrentUser();
-                renderPlayers(app);
-                break;
-
             case "#matchesinfor":
                 await ensureCurrentUser();
                 renderMatches(app);
@@ -150,13 +143,8 @@ window.addEventListener("DOMContentLoaded", async () => {
                 renderTournaments(app);
                 break;
 
-            case "#rankings":
-                await ensureCurrentUser();
-                renderRankings(app);
-                break;
-
             case "#tournament":
-                showTournament(app);
+                await showTournament(app);
                 break;
 
             case "#friends":

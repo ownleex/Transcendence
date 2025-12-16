@@ -1,6 +1,10 @@
 import { io, Socket } from "socket.io-client";
 
 export type GameMode = "duo" | "quad" | "local-duo" | "local-quad";
+type GameOptions = {
+    playerLabels?: Record<string, string>;
+    onEnd?: (payload: { winner?: string; scores: Record<string, number> }) => void;
+};
 
 type RemoteMode = "duo" | "quad";
 
@@ -51,10 +55,11 @@ let currentMatchId: number | null = null;
 /**
  * Affiche et lance une partie (duo ou quad) + chat de match.
  */
-export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
+export async function showGame(container: HTMLElement, mode: GameMode = "duo", options: GameOptions = {}) {
     const isLocal = mode.startsWith("local");
     const isQuad = mode === "quad" || mode === "local-quad";
     const remoteMode: RemoteMode = mode === "duo" || mode === "quad" ? mode : "duo";
+    let nameLabels: Record<string, string> | undefined = options.playerLabels;
 
     currentMatchId = null;
     container.innerHTML = isLocal
@@ -235,6 +240,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         });
 
         gameSocket.on("state", (msg: any) => {
+            if (msg.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
             if (msg.config) {
                 config = { ...config, ...msg.config };
                 canvas.width = config.width;
@@ -264,7 +270,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
 
             state.paddles = newPaddles;
             scores = msg.scores;
-            renderScores(scoreBox, scores, isQuad, undefined, msg.names);
+            renderScores(scoreBox, scores, isQuad, undefined, nameLabels || msg.names);
         });
 
 
@@ -290,11 +296,12 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         gameSocket.on("start", (msg: any) => {
             matchStarted = true;
             isReady = true;
+            if (msg?.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
             if (msg?.state) {
                 state.ball = msg.state.ball;
                 state.paddles = msg.state.paddles;
                 scores = msg.scores || scores;
-                renderScores(scoreBox, scores, isQuad, undefined, msg.names);
+                renderScores(scoreBox, scores, isQuad, undefined, nameLabels || msg.names);
             }
             setStatus("GO !");
             if (readyButton) readyButton.style.display = "none";
@@ -314,7 +321,9 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         gameSocket.on("end", (msg: any) => {
             running = false;
             matchStarted = false;
-            renderScores(scoreBox, scores, isQuad, msg?.winner || "END", msg?.names);
+            if (msg?.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
+            renderScores(scoreBox, scores, isQuad, msg?.winner || "END", nameLabels || msg?.names);
+            options.onEnd?.({ winner: msg?.winner, scores });
         });
 
         // Envoi des mouvements avec prédiction côté client
@@ -411,7 +420,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
     // Local game loop
     // ---------------------------
     let lastTime = performance.now();
-    renderScores(scoreBox, scores, isQuad);
+    renderScores(scoreBox, scores, isQuad, undefined, nameLabels);
 
     function loop(ts: number) {
         const dt = (ts - lastTime) / 1000;
@@ -420,10 +429,12 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo") {
         if (isLocal) {
             stepLocal(state, scores, keys, config, isQuad, dt, () => {
                 running = false;
-                renderScores(scoreBox, scores, isQuad, findLocalWinner(scores));
+                const winner = findLocalWinner(scores);
+                renderScores(scoreBox, scores, isQuad, winner, nameLabels);
+                options.onEnd?.({ winner, scores });
                 teardown();
             });
-            renderScores(scoreBox, scores, isQuad);
+            renderScores(scoreBox, scores, isQuad, undefined, nameLabels);
         }
 
         draw(ctx, canvas, state, config, isQuad);

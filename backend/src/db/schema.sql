@@ -99,6 +99,8 @@ CREATE TABLE Match (
     player1 INTEGER NOT NULL,
     player2 INTEGER NOT NULL,
     winner INTEGER,
+    round TEXT,
+    slot INTEGER,
     tournament_id INTEGER NOT NULL,
     FOREIGN KEY (player1) REFERENCES Player(player_id) ON DELETE CASCADE,
     FOREIGN KEY (player2) REFERENCES Player(player_id) ON DELETE CASCADE,
@@ -125,3 +127,4 @@ ALTER TABLE OAuth ADD COLUMN refresh_token TEXT;
 ALTER TABLE OAuth ADD COLUMN expires_at INTEGER;
 ALTER TABLE Tournament ADD COLUMN WinnerId INTEGER;
 ALTER TABLE Tournament ADD COLUMN WinnerName TEXT;
+ALTER TABLE Tournament ADD COLUMN WinnerAvatar TEXT;

@@ -114,6 +114,16 @@ export const createTournament = (data: any) =>
 export const joinTournament = (data: any) =>
   request("/tournament/join", { method: "POST", body: JSON.stringify(data) });
 
+export const fetchTournamentBracket = (id: number) =>
+  request(`/tournament/${id}/bracket`);
+
+export const reportTournamentResult = (tournamentId: number, matchId: number, winner: number, scores?: Record<string, number>) =>
+  request(`/tournament/${tournamentId}/match/${matchId}/result`, {
+    method: "POST",
+    body: JSON.stringify({ winner, scores }),
+  });
+
+export const fetchTournaments = () => request("/user/tournaments");
 export const fetchPlayers = async (tournament_id: number) => {
   return request(`/tournament/${tournament_id}/players`);
 };
