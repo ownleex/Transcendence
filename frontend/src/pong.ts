@@ -1,10 +1,12 @@
 import { io, Socket } from "socket.io-client";
+import { blockFriend } from "./api";
 
 export type GameMode = "duo" | "quad" | "local-duo" | "local-quad";
 type GameOptions = {
     playerLabels?: Record<string, string>;
     onEnd?: (payload: { winner?: string; scores: Record<string, number> }) => void;
     matchId?: number;
+    source?: "matchmaking" | "tournament";
 };
 
 type RemoteMode = "duo" | "quad";
@@ -60,6 +62,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
     const isLocal = mode.startsWith("local");
     const isQuad = mode === "quad" || mode === "local-quad";
     const remoteMode: RemoteMode = mode === "duo" || mode === "quad" ? mode : "duo";
+    const source = options.source ?? "matchmaking";
     let nameLabels: Record<string, string> | undefined = options.playerLabels;
     const returnHash = window.location.hash || "#home";
 
@@ -118,6 +121,11 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
 
     const keys = new Set<string>();
     const keydownHandler = (e: KeyboardEvent) => {
+        if (!isLocal && servePending && myPaddleIndex === serverIndex && !isPaused && (e.key === " " || e.key === "Enter")) {
+            e.preventDefault();
+            sendServe();
+            return;
+        }
         if (!isLocal && !matchStarted && !isReady && (e.key === " " || e.key === "Enter")) {
             e.preventDefault();
             sendReady();
@@ -137,11 +145,48 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
     let myPaddleIndex: number | null = null;
     let isPaused = false;
     let matchEnded = false;
+    let pendingReady = false;
+    let servePending = false;
+    let serverIndex: number | null = null;
     const setStatus = (text: string) => {
         if (statusBox) statusBox.textContent = text;
     };
+    const updateServeUI = () => {
+        if (!readyButton) return;
+        if (!matchStarted || isPaused) {
+            readyButton.style.display = "";
+            if (!isReady) {
+                readyButton.disabled = false;
+                readyButton.textContent = "I'm ready";
+            }
+            return;
+        }
+        if (!servePending) {
+            readyButton.style.display = "none";
+            return;
+        }
+        readyButton.style.display = "block";
+        if (myPaddleIndex && serverIndex === myPaddleIndex) {
+            readyButton.disabled = false;
+            readyButton.textContent = "Serve (Space/Enter)";
+            setStatus("Your serve. Press Space or Enter.");
+        } else {
+            readyButton.disabled = true;
+            readyButton.textContent = "Waiting for serve";
+            setStatus("Waiting for opponent to serve...");
+        }
+    };
     const sendReady = () => {
         if (isLocal || isReady) return;
+        if (!gameSocket || !gameSocket.connected) {
+            pendingReady = true;
+            if (readyButton) {
+                readyButton.disabled = true;
+                readyButton.textContent = "Ready (queued)";
+            }
+            setStatus("Connecting... ready queued");
+            return;
+        }
         isReady = true;
         if (readyButton) {
             readyButton.disabled = true;
@@ -152,7 +197,31 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             gameSocket.emit("ready");
         }
     };
+    const sendServe = () => {
+        if (isLocal || !gameSocket || !servePending || isPaused) return;
+        if (myPaddleIndex && serverIndex === myPaddleIndex) {
+            gameSocket.emit("serve");
+        }
+    };
     let returnTriggered = false;
+    const resumeMatchKey = "lastOnlineMatchId";
+    const resumeMatchModeKey = "lastOnlineMatchMode";
+    const resumeMatchSourceKey = "lastOnlineMatchSource";
+    const storeResumeMatch = (id: number) => {
+        if (isLocal || source !== "matchmaking") return;
+        localStorage.setItem(resumeMatchKey, String(id));
+        localStorage.setItem(resumeMatchModeKey, remoteMode);
+        localStorage.setItem(resumeMatchSourceKey, source);
+    };
+    const clearResumeMatch = () => {
+        if (source !== "matchmaking") return;
+        const stored = localStorage.getItem(resumeMatchKey);
+        if (stored && currentMatchId !== null && stored === String(currentMatchId)) {
+            localStorage.removeItem(resumeMatchKey);
+            localStorage.removeItem(resumeMatchModeKey);
+            localStorage.removeItem(resumeMatchSourceKey);
+        }
+    };
     const handleReturn = () => {
         if (returnTriggered) return;
         returnTriggered = true;
@@ -181,14 +250,21 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
 
             await fetch(joinUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({ userId: currentUserId }),
             });
 
             // Poll for match with timeout
             const start = Date.now();
             while (!matchId && Date.now() - start < 20000) {
-                const res = await fetch(`${statusUrl}?userId=${currentUserId}`);
+                const res = await fetch(`${statusUrl}?userId=${currentUserId}`, {
+                    headers: {
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                });
                 const data = await res.json();
                 if (data.status === "matched") {
                     matchId = data.matchId;
@@ -200,7 +276,10 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             if (!matchId) {
                 await fetch(cancelUrl, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
                     body: JSON.stringify({ userId: currentUserId }),
                 });
                 container.innerHTML = "<p class='text-red-500 text-center mt-8'>Matchmaking cancelled (timeout)</p>";
@@ -224,10 +303,11 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         } = buildUI(container, !isLocal));
 
         currentMatchId = matchId;
+        storeResumeMatch(matchId);
     
         if (!isLocal) {
             readyButton = document.createElement("button");
-            readyButton.textContent = "I'm ready";
+            readyButton.textContent = "Connecting...";
             readyButton.style.position = "absolute";
             readyButton.style.left = "50%";
             readyButton.style.bottom = "24px";
@@ -239,12 +319,17 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             readyButton.style.color = "#fff";
             readyButton.style.fontWeight = "700";
             readyButton.style.boxShadow = "0 6px 12px rgba(0,0,0,0.15)";
+            readyButton.disabled = true;
             readyButton.addEventListener("click", (e) => {
                 e.preventDefault();
-                sendReady();
+                if (!matchStarted || isPaused) {
+                    sendReady();
+                } else if (servePending && myPaddleIndex === serverIndex) {
+                    sendServe();
+                }
             });
             wrapper.appendChild(readyButton);
-            setStatus('Match found! Press "Space" or click "I’m ready" to launch.');
+            setStatus("Connecting to match...");
         }
 
         const useSecure = window.location.protocol === "https:";
@@ -255,8 +340,43 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             secure: useSecure,
         });
 
+        gameSocket.on("connect", () => {
+            if (readyButton) {
+                readyButton.disabled = false;
+                readyButton.textContent = "I'm ready";
+            }
+            if (!isReady) {
+                setStatus('Match found! Press "Space" or click "I’m ready" to launch.');
+            }
+            if (pendingReady && !isReady) {
+                pendingReady = false;
+                sendReady();
+            }
+            updateServeUI();
+        });
+
         gameSocket.on("connect_error", (err) => {
             console.error("Game socket connect_error:", err);
+            if (readyButton) {
+                readyButton.disabled = true;
+                readyButton.textContent = "Connecting...";
+            }
+            if (err?.message?.includes("Unauthorized") || err?.message?.includes("Forbidden")) {
+                setStatus("Connection refused. Please log in again.");
+                alert("Unable to join the game (auth error). Please log in again.");
+            } else {
+                setStatus("Connection error. Retrying...");
+            }
+        });
+
+        gameSocket.on("error", (err: any) => {
+            console.error("Game socket error event:", err);
+            const msg = err?.message || "Connection error";
+            setStatus(msg);
+            if (readyButton) {
+                readyButton.disabled = true;
+                readyButton.textContent = "Connecting...";
+            }
         });
 
         gameSocket.on("identify", ({ index }) => {
@@ -281,13 +401,13 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             const myPaddleKey = `p${myPaddleIndex}` as keyof PaddleState;
             const newPaddles = { ...state.paddles };
 
-            // Update all paddles except mine
+            const forceAll = servePending || !matchStarted;
+            // Update all paddles; for my paddle we force on serve to avoid drift
             (Object.keys(msg.state.paddles) as Array<keyof PaddleState>).forEach((key) => {
-                if (key !== myPaddleKey) {
-                    const serverValue = msg.state.paddles[key] as number;
-                    const currentValue = state.paddles[key] as number;
-                    // Soft interpolation to avoid jitter (20% toward server position)
-                    newPaddles[key] = currentValue + (serverValue - currentValue) * 0.3 as any;
+                const serverValue = msg.state.paddles[key] as number;
+                const currentValue = state.paddles[key] as number;
+                if (forceAll || key !== myPaddleKey) {
+                    newPaddles[key] = forceAll ? serverValue : (currentValue + (serverValue - currentValue) * 0.3 as any);
                 }
             });
 
@@ -319,6 +439,8 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         gameSocket.on("start", (msg: any) => {
             matchStarted = true;
             isReady = true;
+            servePending = !!msg?.waitServe;
+            serverIndex = msg?.server ?? serverIndex ?? 1;
             if (msg?.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
             if (msg?.state) {
                 state.ball = msg.state.ball;
@@ -326,9 +448,27 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
                 scores = msg.scores || scores;
                 renderScores(scoreBox, scores, isQuad, undefined, nameLabels || msg.names);
             }
+            if (servePending) {
+                setStatus("Waiting for serve...");
+                updateServeUI();
+            } else {
+                setStatus("GO !");
+                if (readyButton) readyButton.style.display = "none";
+                setTimeout(() => setStatus(""), 1200);
+            }
+        });
+
+        gameSocket.on("waitServe", (msg: any) => {
+            servePending = true;
+            serverIndex = msg?.server ?? serverIndex ?? 1;
+            updateServeUI();
+        });
+
+        gameSocket.on("serve", (msg: any) => {
+            servePending = false;
             setStatus("GO !");
             if (readyButton) readyButton.style.display = "none";
-            setTimeout(() => setStatus(""), 1200);
+            setTimeout(() => setStatus(""), 800);
         });
 
         // Dedicated event for ball updates (60 FPS)
@@ -349,6 +489,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             if (msg?.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
             renderScores(scoreBox, scores, isQuad, msg?.winner || "END", nameLabels || msg?.names);
             options.onEnd?.({ winner: msg?.winner, scores });
+            clearResumeMatch();
             showReturnOverlay(handleReturn);
         });
 
@@ -356,19 +497,14 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             isPaused = true;
             isReady = false;
             setStatus("Opponent disconnected. Press Ready to resume when they return.");
-            if (readyButton) {
-                readyButton.style.display = "block";
-                readyButton.disabled = false;
-                readyButton.textContent = "I'm ready";
-            }
+            servePending = true;
+            updateServeUI();
         });
 
         gameSocket.on("resume", () => {
             isPaused = false;
             setStatus("Opponent reconnected. Resuming...");
-            if (readyButton) {
-                readyButton.style.display = "none";
-            }
+            updateServeUI();
             setTimeout(() => setStatus(""), 1500);
         });
 
@@ -466,6 +602,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
     // Local game loop
     // ---------------------------
     let lastTime = performance.now();
+    let localServe = { pending: isLocal }; // wait for serve in local modes
     renderScores(scoreBox, scores, isQuad, undefined, nameLabels);
 
     function loop(ts: number) {
@@ -473,7 +610,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         lastTime = ts;
 
         if (isLocal) {
-            stepLocal(state, scores, keys, config, isQuad, dt, () => {
+            stepLocal(state, scores, keys, config, isQuad, dt, localServe, () => {
                 if (matchEnded) return;
                 matchEnded = true;
                 running = false;
@@ -530,9 +667,28 @@ function stepLocal(
     config: GameConfig,
     isQuad: boolean,
     dt: number,
+    serveCtrl: { pending: boolean },
     onEnd: () => void
 ) {
     const speed = config.paddleSpeed;
+    // If waiting for serve, keep ball stopped until space/enter pressed
+    if (serveCtrl.pending) {
+        state.ball.vx = 0;
+        state.ball.vy = 0;
+        state.ball.x = config.width / 2;
+        state.ball.y = config.height / 2;
+        state.paddles.p1 = config.height / 2;
+        state.paddles.p2 = config.height / 2;
+        if (isQuad) {
+            state.paddles.p3 = config.width / 2;
+            state.paddles.p4 = config.width / 2;
+        }
+        if (keys.has(" ") || keys.has("Enter")) {
+            serveCtrl.pending = false;
+            resetLocalBall(state, config);
+        }
+    }
+
     // Input mapping for local keyboard players
     if (keys.has("w")) state.paddles.p1 -= speed;
     if (keys.has("s")) state.paddles.p1 += speed;
@@ -555,7 +711,7 @@ function stepLocal(
 
     // Move ball
     const b = state.ball;
-    if (b.vx === 0 && b.vy === 0) {
+    if (b.vx === 0 && b.vy === 0 && !serveCtrl.pending) {
         resetLocalBall(state, config);
     }
     b.x += b.vx * dt;
@@ -615,16 +771,32 @@ function stepLocal(
     // Goals
     if (b.x < 0) {
         scores.p2 += 1;
-        resetLocalBall(state, config);
+        serveCtrl.pending = true;
+        state.ball.x = config.width / 2;
+        state.ball.y = config.height / 2;
+        state.ball.vx = 0;
+        state.ball.vy = 0;
     } else if (b.x > config.width) {
         scores.p1 += 1;
-        resetLocalBall(state, config);
+        serveCtrl.pending = true;
+        state.ball.x = config.width / 2;
+        state.ball.y = config.height / 2;
+        state.ball.vx = 0;
+        state.ball.vy = 0;
     } else if (isQuad && b.y < 0) {
         scores.p4! += 1;
-        resetLocalBall(state, config);
+        serveCtrl.pending = true;
+        state.ball.x = config.width / 2;
+        state.ball.y = config.height / 2;
+        state.ball.vx = 0;
+        state.ball.vy = 0;
     } else if (isQuad && b.y > config.height) {
         scores.p3! += 1;
-        resetLocalBall(state, config);
+        serveCtrl.pending = true;
+        state.ball.x = config.width / 2;
+        state.ball.y = config.height / 2;
+        state.ball.vx = 0;
+        state.ball.vy = 0;
     }
 
     if (checkWin(scores)) {
@@ -941,6 +1113,92 @@ function showReturnOverlay(onReturn: () => void, delaySeconds: number = 5) {
 // ---------------------------
 // Chat helpers
 // ---------------------------
+function renderChatMessage(
+    msg: { from: number; fromUsername?: string; text: string; at: string },
+    messagesList: HTMLUListElement
+) {
+    // Prevent duplicates (same sender + same text + timestamp)
+    const dedupKey = `${msg.from}|${msg.text}|${msg.at}`;
+    const seen = ((messagesList as any)._seenKeys ??= new Set<string>());
+    if (seen.has(dedupKey)) return;
+    seen.add(dedupKey);
+
+    const li = document.createElement("li");
+    const time = new Date(msg.at).toLocaleTimeString();
+    const label = msg.fromUsername || `#${msg.from}`;
+
+    const timeSpan = document.createElement("span");
+    timeSpan.textContent = `[${time}] `;
+    li.appendChild(timeSpan);
+
+    if (Number.isFinite(msg.from)) {
+        const link = document.createElement("button");
+        link.type = "button";
+        link.textContent = label;
+        link.style.color = "#a5b4fc";
+        link.style.textDecoration = "underline";
+        link.style.cursor = "pointer";
+        link.style.background = "transparent";
+        link.style.border = "none";
+        link.addEventListener("click", (e) => {
+            e.stopPropagation();
+            sessionStorage.setItem("profileUserId", String(msg.from));
+            if ((window as any).stopCurrentGame) {
+                try { (window as any).stopCurrentGame(); } catch { /* ignore */ }
+            }
+            window.location.hash = "#profile";
+            try {
+                window.dispatchEvent(new HashChangeEvent("hashchange"));
+            } catch {
+                /* ignore */
+            }
+        });
+        li.appendChild(link);
+    } else {
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = label;
+        li.appendChild(nameSpan);
+    }
+
+    const textSpan = document.createElement("span");
+    textSpan.textContent = `: ${msg.text}`;
+    li.appendChild(textSpan);
+
+    // Quick block action
+    const me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
+    const myId = Number(me?.id);
+    if (Number.isFinite(msg.from) && msg.from !== myId) {
+        const blockBtn = document.createElement("button");
+        blockBtn.type = "button";
+        blockBtn.textContent = "Block";
+        blockBtn.style.marginLeft = "8px";
+        blockBtn.style.fontSize = "11px";
+        blockBtn.style.padding = "2px 6px";
+        blockBtn.style.borderRadius = "8px";
+        blockBtn.style.border = "none";
+        blockBtn.style.background = "#ef4444";
+        blockBtn.style.color = "#fff";
+        blockBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm(`Block ${label}? They will no longer be able to chat with you.`)) return;
+            try {
+                await blockFriend(msg.from);
+                const muted = document.createElement("span");
+                muted.style.marginLeft = "6px";
+                muted.style.color = "#94a3b8";
+                muted.textContent = "(blocked)";
+                li.appendChild(muted);
+            } catch (err: any) {
+                alert(err?.message || "Failed to block user.");
+            }
+        });
+        li.appendChild(blockBtn);
+    }
+
+    messagesList.appendChild(li);
+    messagesList.scrollTop = messagesList.scrollHeight;
+}
+
 function initMatchChat(matchId: number, messagesList: HTMLUListElement) {
     // Prevent duplicate sockets
     if (chatSocket) {
@@ -966,48 +1224,20 @@ function initMatchChat(matchId: number, messagesList: HTMLUListElement) {
     chatSocket.on("connect_error", (err) => {
         if (errorShown) return;
         errorShown = true;
-        const li = document.createElement("li");
-        li.textContent = `Chat error: ${err.message}`;
-        messagesList.appendChild(li);
+        renderChatMessage(
+            { from: -1, text: `Chat error: ${err.message}`, at: new Date().toISOString() },
+            messagesList
+        );
+    });
+
+    chatSocket.on("connect", () => {
+        chatSocket?.emit("joinMatchChat", matchId);
     });
 
     chatSocket.emit("joinMatchChat", matchId);
 
     chatSocket.on("chat:message", (msg: { from: number; fromUsername?: string; text: string; at: string }) => {
-        const li = document.createElement("li");
-        const time = new Date(msg.at).toLocaleTimeString();
-        const label = msg.fromUsername || `#${msg.from}`;
-
-        const timeSpan = document.createElement("span");
-        timeSpan.textContent = `[${time}] `;
-        li.appendChild(timeSpan);
-
-        if (Number.isFinite(msg.from)) {
-            const link = document.createElement("button");
-            link.type = "button";
-            link.textContent = label;
-            link.style.color = "#a5b4fc";
-            link.style.textDecoration = "underline";
-            link.style.cursor = "pointer";
-            link.style.background = "transparent";
-            link.style.border = "none";
-            link.addEventListener("click", () => {
-                sessionStorage.setItem("profileUserId", String(msg.from));
-                window.location.hash = "#profile";
-            });
-            li.appendChild(link);
-        } else {
-            const nameSpan = document.createElement("span");
-            nameSpan.textContent = label;
-            li.appendChild(nameSpan);
-        }
-
-        const textSpan = document.createElement("span");
-        textSpan.textContent = `: ${msg.text}`;
-        li.appendChild(textSpan);
-
-        messagesList.appendChild(li);
-        messagesList.scrollTop = messagesList.scrollHeight;
+        renderChatMessage(msg, messagesList);
     });
 
 }
@@ -1028,8 +1258,6 @@ function setupChatForm(form: HTMLFormElement, input: HTMLInputElement) {
             text: safeText,
         });
 
-        // Feedback local "you"
-        const messages = form.parentElement?.querySelector("ul");
         input.value = "";
     });
 }

@@ -360,18 +360,28 @@ fastify.get("/me", { preHandler: [fastify.authenticate] },
     reply.code(500).send({ success: false, error: err.message });
   }
 });
- fastify.put("/friend/block", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+fastify.put("/friend/block", { preHandler: [fastify.authenticate] }, async (req, reply) => {
     const { userId } = req.body as any;  // the person being blocked
     const blockerId = (req.user as any).id;
 
+    if (!userId || blockerId === userId) {
+        return reply.code(400).send({ success: false, error: "Invalid userId" });
+    }
+
     try {
-        await fastify.db.run(
+        const res = await fastify.db.run(
             `UPDATE Friend
              SET status='blocked'
              WHERE (user_id=? AND friend_id=?)
                 OR (user_id=? AND friend_id=?)`,
             [blockerId, userId, userId, blockerId]
         );
+        if (res.changes === 0) {
+            await fastify.db.run(
+                `INSERT OR IGNORE INTO Friend (user_id, friend_id, status) VALUES (?, ?, 'blocked')`,
+                [blockerId, userId]
+            );
+        }
         reply.send({ success: true });
     } catch (err: any) {
         reply.code(500).send({ success: false, error: err.message });
@@ -382,12 +392,15 @@ fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (re
     const { userId } = req.body as any;  // the person being unblocked
     const blockerId = (req.user as any).id;
 
+    if (!userId || blockerId === userId) {
+        return reply.code(400).send({ success: false, error: "Invalid userId" });
+    }
+
     try {
         await fastify.db.run(
-            `UPDATE Friend
-            SET status='pending'
-            WHERE (user_id=? AND friend_id=?)
-            OR (user_id=? AND friend_id=?)`,
+            `DELETE FROM Friend
+             WHERE (user_id=? AND friend_id=?)
+                OR (user_id=? AND friend_id=?)`,
             [blockerId, userId, userId, blockerId]
         );
         reply.send({ success: true });
@@ -407,25 +420,38 @@ fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (re
             fastify.log.info({ id }, "Fetching match history"); 
             try {
                 const rows = await fastify.db.all(
-                    `SELECT 
+                    `WITH relevant AS (
+                        SELECT *,
+                               (CASE WHEN user_id < opponent_id THEN user_id ELSE opponent_id END) AS a,
+                               (CASE WHEN user_id < opponent_id THEN opponent_id ELSE user_id END) AS b
+                        FROM MatchHistory
+                        WHERE user_id = ? OR opponent_id = ?
+                    ),
+                    dedup AS (
+                        SELECT *, ROW_NUMBER() OVER (PARTITION BY a, b, date(date) ORDER BY match_id DESC) AS rn
+                        FROM relevant
+                    )
+                    SELECT 
                         mh.match_id,
-                        mh.user_id,
-                        u1.username AS user_name,
-                        u1.avatar AS user_avatar,
-                        mh.opponent_id,
-                        u2.username AS opponent_name,
-                        u2.avatar AS opponent_avatar,
-                        mh.user_score,
-                        mh.opponent_score,
-                        mh.user_elo,
                         mh.date,
-                        mh.result
-                     FROM MatchHistory mh
-                     LEFT JOIN User u1 ON mh.user_id = u1.id
-                     LEFT JOIN User u2 ON mh.opponent_id = u2.id
-                     WHERE mh.user_id = ? OR mh.opponent_id = ?
-                     ORDER BY mh.date DESC`,
-                    [id, id]
+                        CASE WHEN mh.user_id = ? THEN mh.user_id ELSE mh.opponent_id END AS user_id,
+                        CASE WHEN mh.user_id = ? THEN mh.opponent_id ELSE mh.user_id END AS opponent_id,
+                        CASE WHEN mh.user_id = ? THEN u1.username ELSE u2.username END AS user_name,
+                        CASE WHEN mh.user_id = ? THEN u2.username ELSE u1.username END AS opponent_name,
+                        CASE WHEN mh.user_id = ? THEN u1.avatar ELSE u2.avatar END AS user_avatar,
+                        CASE WHEN mh.user_id = ? THEN u2.avatar ELSE u1.avatar END AS opponent_avatar,
+                        CASE WHEN mh.user_id = ? THEN mh.user_score ELSE mh.opponent_score END AS user_score,
+                        CASE WHEN mh.user_id = ? THEN mh.opponent_score ELSE mh.user_score END AS opponent_score,
+                        CASE WHEN mh.user_id = ?
+                            THEN mh.result
+                            ELSE (CASE mh.result WHEN 'win' THEN 'loss' WHEN 'loss' THEN 'win' ELSE mh.result END)
+                        END AS result
+                    FROM dedup mh
+                    LEFT JOIN User u1 ON mh.user_id = u1.id
+                    LEFT JOIN User u2 ON mh.opponent_id = u2.id
+                    WHERE mh.rn = 1
+                    ORDER BY mh.date DESC`,
+                    [id, id, id, id, id, id, id, id, id, id, id]
                 );
                 const normalized = rows.map((row: any) => ({
                     ...row,
@@ -588,23 +614,50 @@ fastify.post(
 
     fastify.get("/matches", async (req, reply) => {
         try {
-            const matches = await fastify.db.all(`
-                  SELECT
+            const matches = await fastify.db.all(
+                `
+                WITH base AS (
+                    SELECT
+                        mh.*,
+                        (CASE WHEN mh.user_id < mh.opponent_id THEN mh.user_id ELSE mh.opponent_id END) AS a,
+                        (CASE WHEN mh.user_id < mh.opponent_id THEN mh.opponent_id ELSE mh.user_id END) AS b,
+                        date(mh.date) AS d
+                    FROM MatchHistory mh
+                ),
+                dedup AS (
+                    SELECT
+                        *,
+                        ROW_NUMBER() OVER (PARTITION BY a, b, d ORDER BY match_id DESC) AS rn
+                    FROM base
+                )
+                SELECT
                     mh.match_id,
+                    mh.date,
+                    mh.user_id,
+                    mh.opponent_id,
                     u1.username AS user_name,
                     u2.username AS opponent_name,
+                    u1.avatar   AS user_avatar,
+                    u2.avatar   AS opponent_avatar,
                     mh.user_score,
                     mh.opponent_score,
-                    mh.result,
-                    mh.date
-                  FROM MatchHistory mh
-                  JOIN User u1 ON u1.id = mh.user_id
-                  JOIN User u2 ON u2.id = mh.opponent_id
-                  ORDER BY mh.date DESC
-                  LIMIT 50
-                `);
+                    mh.result
+                FROM dedup mh
+                JOIN User u1 ON u1.id = mh.user_id
+                JOIN User u2 ON u2.id = mh.opponent_id
+                WHERE mh.rn = 1
+                ORDER BY mh.date DESC
+                LIMIT 100
+                `
+            );
 
-            reply.send({ matches });
+            const normalized = matches.map((row: any) => ({
+                ...row,
+                user_avatar: normalizeAvatar(row.user_avatar),
+                opponent_avatar: normalizeAvatar(row.opponent_avatar),
+            }));
+
+            reply.send({ matches: normalized });
         } catch (err: any) {
             reply.code(500).send({ error: err.message });
         }

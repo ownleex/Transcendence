@@ -362,6 +362,7 @@ export async function showTournament(container: HTMLElement) {
                     await showGame(container, "duo", {
                         playerLabels: labels,
                         matchId: gameMatchId,
+                        source: "tournament",
                         onEnd: async (result) => {
                             const winnerKey = result.winner;
                             const scores = result.scores || {};
@@ -510,6 +511,7 @@ export async function showTournament(container: HTMLElement) {
                 await showGame(container, "duo", {
                     playerLabels: labels,
                     matchId: payload.gameMatchId,
+                    source: "tournament",
                     onEnd: async (result) => {
                         const winnerKey = result.winner;
                         const scores = result.scores || {};

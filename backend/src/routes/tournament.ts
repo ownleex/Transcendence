@@ -236,8 +236,10 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
   const tournamentReady: Map<number, Set<number>> = (fastify as any).tournamentReady || new Map();
   (fastify as any).tournamentReady = tournamentReady;
   // Map bracket match_id -> live game matchId (to let late listeners join)
-  const liveGameMatches: Map<number, number> = (fastify as any).tournamentLiveMatches || new Map();
+  const liveGameMatches: Map<number, { gameId: number; createdAt: number }> = (fastify as any).tournamentLiveMatches || new Map();
   (fastify as any).tournamentLiveMatches = liveGameMatches;
+  const creatingLiveMatches: Set<number> = (fastify as any).tournamentLiveCreating || new Set();
+  (fastify as any).tournamentLiveCreating = creatingLiveMatches;
   // ----------------------------
   // Create new tournament
   // ----------------------------
@@ -489,7 +491,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
     const onlineUsers = (fastify as any).onlineUsers as Map<number, string> | undefined;
     const io = (fastify as any).io;
     const readyMap: Map<number, Set<number>> = (fastify as any).tournamentReady;
-    const liveMap: Map<number, number> = (fastify as any).tournamentLiveMatches;
+    const liveMap: Map<number, { gameId: number; createdAt: number }> = (fastify as any).tournamentLiveMatches;
 
     try {
       const matchIdNum = Number(matchId);
@@ -520,17 +522,18 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       // If a live match exists but is stale or wrong, discard it
       const existingLive = liveMap.get(matchIdNum);
       if (existingLive) {
-        const active = isMatchActive(existingLive);
-        const correctPlayers = matchHasPlayers(existingLive, participants);
-        if (!active || !correctPlayers) {
-          removeMatch(existingLive);
+        const tooOld = Date.now() - existingLive.createdAt > 20 * 60 * 1000;
+        const active = isMatchActive(existingLive.gameId);
+        const correctPlayers = matchHasPlayers(existingLive.gameId, participants);
+        if (tooOld || !active || !correctPlayers) {
+          removeMatch(existingLive.gameId);
           liveMap.delete(matchIdNum);
         }
       }
 
       // If match already launched and still valid, return existing gameMatchId so client can join without refresh
       if (liveMap.has(matchIdNum)) {
-        return reply.send({ success: true, status: "starting", gameMatchId: liveMap.get(matchIdNum) });
+        return reply.send({ success: true, status: "starting", gameMatchId: liveMap.get(matchIdNum)!.gameId });
       }
 
       if (!readyMap.has(matchIdNum)) readyMap.set(matchIdNum, new Set());
@@ -550,14 +553,26 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       }
 
       // Both ready: create direct match for online play
+      if (liveMap.has(matchIdNum)) {
+        return reply.send({ success: true, status: "starting", gameMatchId: liveMap.get(matchIdNum)!.gameId });
+      }
+      if (creatingLiveMatches.has(matchIdNum)) {
+        return reply.send({ success: true, status: "starting" });
+      }
+      creatingLiveMatches.add(matchIdNum);
       const mode: 2 | 4 = 2;
       const staleLive = liveMap.get(matchIdNum);
       if (staleLive) {
-        removeMatch(staleLive);
+        removeMatch(staleLive.gameId);
       }
-      const matchIdGame = createDirectMatch([match.u1, match.u2], mode);
-      readyMap.delete(matchIdNum);
-      liveMap.set(matchIdNum, matchIdGame);
+      let matchIdGame: number;
+      try {
+        matchIdGame = createDirectMatch([match.u1, match.u2], mode);
+        readyMap.delete(matchIdNum);
+        liveMap.set(matchIdNum, { gameId: matchIdGame, createdAt: Date.now() });
+      } finally {
+        creatingLiveMatches.delete(matchIdNum);
+      }
 
       for (const uid of participants) {
         const sid = onlineUsers?.get(uid);
@@ -701,7 +716,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       }
 
       await progressBracket(fastify, tournamentId);
-      const liveMap: Map<number, number> = (fastify as any).tournamentLiveMatches;
+      const liveMap: Map<number, { gameId: number; createdAt: number }> = (fastify as any).tournamentLiveMatches;
       liveMap?.delete(matchIdNum);
 
       const bracket = await fastify.inject({
