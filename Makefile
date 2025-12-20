@@ -33,13 +33,14 @@ clean:
 	@echo "$(YELLOW)🛑 Stopping containers...$(NC)"
 	@docker compose down
 	@echo "$(GREEN)✓ Containers stopped!$(NC)"
-	@sudo rm -rf ./backend/data
-	@echo "$(GREEN)✓ Data directory removed!$(NC)"
+
 
 fclean: clean
 	@echo "$(RED)🧹 Cleaning Docker system...$(NC)"
 	@docker compose down --volumes --remove-orphans
 	@docker system prune -af --volumes
+	@sudo rm -rf ./backend/data
+	@echo "$(GREEN)✓ Data directory removed!$(NC)"
 	@echo "$(GREEN)✓ System cleaned!$(NC)"
 
 re: fclean all
