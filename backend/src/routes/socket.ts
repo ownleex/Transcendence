@@ -78,8 +78,24 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
 
     // --- Gestion des users en ligne ---
     onlineUsers.set(userId, socket.id);
+    (socket as any).data.userId = userId;
     io.emit("user:online", { userId });
     fastify.log.info({ userId }, "Socket connected");
+
+   // helper to know if blocked (either direction)
+   const isBlocked = async (a: number, b: number) => {
+      try {
+        const row = await fastify.db.get(
+          `SELECT 1 FROM Friend 
+           WHERE status='blocked' AND 
+           ((user_id=? AND friend_id=?) OR (user_id=? AND friend_id=?))`,
+          [a, b, b, a]
+        );
+        return !!row;
+      } catch {
+        return false;
+      }
+    };
 
     // --- Chat lié au match ---
     socket.on("joinMatchChat", (matchId: number) => {
@@ -113,7 +129,18 @@ export const setupSocket = fp(async (fastify: FastifyInstance) => {
           fromUsername,
         };
 
-        io.to(room).emit("chat:message", msg);
+        const recipients = await io.in(room).fetchSockets();
+        for (const s of recipients) {
+          const otherId = (s as any).data?.userId || s.handshake.auth?.userId;
+          if (!otherId) {
+            io.to(s.id).emit("chat:message", msg);
+            continue;
+          }
+          if (await isBlocked(userId!, Number(otherId))) {
+            continue;
+          }
+          io.to(s.id).emit("chat:message", msg);
+        }
       }
     );
    

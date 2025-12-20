@@ -4,6 +4,18 @@ import { WebSocket } from "ws";
 import type { Socket as IOSocket, Server as IOServer } from "socket.io";
 
 let fastifyRef: FastifyInstance | null = null;
+function authUserIdFromHeaders(req: any): number | null {
+    const authHeader: string | undefined = req?.headers?.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ") || !fastifyRef) return null;
+    const token = authHeader.slice(7);
+    try {
+        const decoded = (fastifyRef as any).jwt.verify(token);
+        const id = Number(decoded?.id || decoded?.userId || decoded?.sub);
+        return Number.isFinite(id) ? id : null;
+    } catch {
+        return null;
+    }
+}
 
 // --------------------
 // Game matches only
@@ -22,6 +34,10 @@ interface Match {
     ready: Set<number>;
     started: boolean;
     countdownTimer?: NodeJS.Timeout | null;
+    paused?: boolean;
+    idleTimeout?: NodeJS.Timeout | null;
+    serverIndex: number;
+    servePending: boolean;
 }
 
 interface GameState2P {
@@ -55,8 +71,12 @@ let quadStatus: Record<number, number> = {};
 function createMatch(matchId: number, mode: 2 | 4, players: number[]) {
     const baseBall: BallState = { x: ARENA_W / 2, y: ARENA_H / 2, vx: 0, vy: 0 };
     const state: GameState = mode === 2
-        ? { mode: 2, paddles: { p1: 300, p2: 300 }, ball: { ...baseBall } }
-        : { mode: 4, paddles: { p1: 300, p2: 300, p3: 300, p4: 300 }, ball: { ...baseBall } };
+        ? { mode: 2, paddles: { p1: ARENA_H / 2, p2: ARENA_H / 2 }, ball: { ...baseBall } }
+        : {
+            mode: 4,
+            paddles: { p1: ARENA_H / 2, p2: ARENA_H / 2, p3: ARENA_W / 2, p4: ARENA_W / 2 },
+            ball: { ...baseBall }
+        };
     const scores: Record<string, number> = mode === 2
         ? { p1: 0, p2: 0 }
         : { p1: 0, p2: 0, p3: 0, p4: 0 };
@@ -73,9 +93,21 @@ function createMatch(matchId: number, mode: 2 | 4, players: number[]) {
         ready: new Set(),
         started: false,
         countdownTimer: null,
+        paused: false,
+        idleTimeout: null,
+        serverIndex: 1,
+        servePending: true,
     };
     matches.set(matchId, match);
     return match;
+}
+
+function resolvePlayerId(match: Match, candidateIds: number[]) {
+    for (const raw of candidateIds) {
+        const id = Number(raw);
+        if (Number.isFinite(id) && match.players.includes(id)) return id;
+    }
+    return null;
 }
 function launchBall(ball: BallState) {
     const fresh = createBall();
@@ -85,10 +117,64 @@ function launchBall(ball: BallState) {
     ball.vy = fresh.vy;
 }
 
+function resetPaddles(match: Match) {
+    if (match.state.mode === 2) {
+        (match.state.paddles as any).p1 = ARENA_H / 2;
+        (match.state.paddles as any).p2 = ARENA_H / 2;
+    } else {
+        (match.state.paddles as any).p1 = ARENA_H / 2;
+        (match.state.paddles as any).p2 = ARENA_H / 2;
+        (match.state.paddles as any).p3 = ARENA_W / 2;
+        (match.state.paddles as any).p4 = ARENA_W / 2;
+    }
+}
+
+// --------------------
+// Direct match creation (used by tournament)
+// --------------------
+export function createDirectMatch(players: number[], mode: 2 | 4 = 2) {
+    const matchId = Date.now();
+    createMatch(matchId, mode, players);
+    return matchId;
+}
+
+export function isMatchActive(matchId: number) {
+    return matches.has(matchId);
+}
+
+export function matchHasPlayers(matchId: number, players: number[]) {
+    const m = matches.get(matchId);
+    if (!m) return false;
+    if (m.players.length !== players.length) return false;
+    return players.every((p) => m.players.includes(p));
+}
+
+export function removeMatch(matchId: number) {
+    matches.delete(matchId);
+}
+
+export function getMatchStatus(matchId: number) {
+    const m = matches.get(matchId);
+    if (!m) return { active: false };
+    return {
+        active: true,
+        mode: m.mode,
+        players: m.players,
+        names: buildNames(m),
+        scores: m.scores,
+        ready: Array.from(m.ready),
+        paused: !!m.paused,
+        servePending: !!m.servePending,
+    };
+}
+
 // --------------------
 // Matchmaking
 // --------------------
 function joinDuoQueue(userId: number): number {
+    if (!Number.isFinite(userId)) return -1;
+    // Avoid duplicates in queue/status maps
+    cancelFromQueue(userId, duoQueue, duoStatus);
     if (duoQueue.length > 0) {
         const opponentId = duoQueue.shift()!;
         const matchId = Date.now();
@@ -103,6 +189,8 @@ function joinDuoQueue(userId: number): number {
 }
 
 function joinQuadQueue(userId: number): number {
+    if (!Number.isFinite(userId)) return -1;
+    cancelFromQueue(userId, quadQueue, quadStatus);
     quadQueue.push(userId);
     if (quadQueue.length >= 4) {
         const players = quadQueue.splice(0, 4);
@@ -113,6 +201,28 @@ function joinQuadQueue(userId: number): number {
     }
     return -1;
 }
+
+function connectionCount(match: Match) {
+    return match.sockets.size + match.ioSockets.size;
+}
+
+function scheduleIdleCleanup(match: Match, delayMs = 180000) {
+    if (match.idleTimeout) {
+        clearTimeout(match.idleTimeout);
+        match.idleTimeout = null;
+    }
+    match.idleTimeout = setTimeout(() => {
+        matches.delete(match.matchId);
+    }, delayMs);
+}
+
+function clearIdleCleanup(match: Match) {
+    if (match.idleTimeout) {
+        clearTimeout(match.idleTimeout);
+        match.idleTimeout = null;
+    }
+}
+
 
 // --------------------
 // WebSocket Setup (game only)
@@ -126,13 +236,23 @@ export function setupGameWS(fastify: FastifyInstance) {
         { websocket: true },
         async (conn, req) => {
             const socket: WebSocket = (conn as any).socket;
-            const userId = Number(req.query.userId);
+            const userIdQuery = Number(req.query.userId);
+            const token = req.query.token as string | undefined;
+            let userId = userIdQuery;
             const matchId = req.query.matchId ? Number(req.query.matchId) : undefined;
 
-            // Token must match the userId
-            // For gameplay, we accept userId from query to avoid websocket auth failures in browsers.
-            const queryIdNum = Number.isFinite(userId) ? userId : null;
-            const tokenUserId: number | null = null;
+            // Token may override userId if valid
+            if (token) {
+                try {
+                    const decoded = await (fastifyRef as any).jwt.verify(token);
+                    const tokenUserId = Number(decoded?.id || decoded?.userId || decoded?.sub);
+                    if (Number.isFinite(tokenUserId)) {
+                        userId = tokenUserId;
+                    }
+                } catch {
+                    // ignore token errors; fallback to query id
+                }
+            }
 
             // Join match if matchId provided
             let match: Match | undefined;
@@ -146,8 +266,8 @@ export function setupGameWS(fastify: FastifyInstance) {
                 match = found;
 
             // Choose the player id to attach the socket to: use the query userId
-            const queryIdNum = Number.isFinite(userId) ? userId : null;
-            playerId = match.players.find(p => queryIdNum !== null ? p === queryIdNum : false) ?? null;
+            const playerCandidate = resolvePlayerId(match, [userId, userIdQuery]);
+            playerId = playerCandidate;
 
             // Resolve player name (ws path doesn't have username, fallback to db)
             const lookupUsername = (fastify as any).lookupUsername as (id: number) => Promise<string>;
@@ -165,6 +285,7 @@ export function setupGameWS(fastify: FastifyInstance) {
                 }
 
                 match.sockets.set(playerId, socket);
+                clearIdleCleanup(match);
                 socket.send(JSON.stringify({
                     type: "state",
                     state: match.state,
@@ -178,6 +299,10 @@ export function setupGameWS(fastify: FastifyInstance) {
                         ballRadius: BALL_RADIUS
                     }
                 }));
+                if (match.servePending) {
+                    socket.send(JSON.stringify({ type: "waitServe", server: match.serverIndex }));
+                }
+                broadcastReady(match);
                 console.log(`User ${userId} joined match ${matchId}`);
             } else {
                 socket.close(4404, "Match not found");
@@ -200,9 +325,34 @@ export function setupGameWS(fastify: FastifyInstance) {
                 if (data.type === "ready" && match && effectivePlayerId != null) {
                     match.ready.add(effectivePlayerId);
                     broadcastReady(match);
-                    tryStartCountdown(match);
+                    if (match.paused) {
+                        if (match.ready.size === match.players.length) {
+                            match.paused = false;
+                            broadcast(match, { type: "resume" });
+                            tryStartCountdown(match);
+                        }
+                    } else {
+                        tryStartCountdown(match);
+                    }
                 return;
             }
+
+                // Serve ball (after point)
+                if (data.type === "serve" && match && effectivePlayerId != null) {
+                    const idx = match.players.indexOf(effectivePlayerId) + 1;
+                    if (!match.started || !match.servePending) return;
+                    if (idx !== match.serverIndex) return;
+                    match.servePending = false;
+                    launchBall(match.state.ball);
+                    broadcast(match, {
+                        type: "serve",
+                        server: idx,
+                        state: match.state,
+                        scores: match.scores,
+                        names: buildNames(match),
+                    });
+                    return;
+                }
 
                 // Paddle move for match
                 if (data.type === "paddle" && match && match.players.includes(effectivePlayerId!)) {
@@ -223,10 +373,21 @@ export function setupGameWS(fastify: FastifyInstance) {
                     match.sockets.delete(effectivePlayerId);
                     match.ready.delete(effectivePlayerId);
                     stopCountdown(match);
+                    resetPaddles(match);
+                    match.state.ball.x = ARENA_W / 2;
+                    match.state.ball.y = ARENA_H / 2;
+                    match.state.ball.vx = 0;
+                    match.state.ball.vy = 0;
+                    match.started = false;
+                    match.servePending = true;
                     broadcastReady(match);
-                    // If everyone left, clean up match. Otherwise keep it alive to avoid early disconnect messages.
-                    if (match.sockets.size === 0) {
-                        matches.delete(match.matchId);
+                    const remaining = connectionCount(match);
+                    if (remaining < match.players.length) {
+                        match.paused = true;
+                        broadcast(match, { type: "pause", reason: "disconnected" });
+                    }
+                    if (remaining === 0) {
+                        scheduleIdleCleanup(match);
                     }
                 }
             });
@@ -246,27 +407,75 @@ export function setupGameWS(fastify: FastifyInstance) {
     const io: IOServer | undefined = (fastify as any).io;
     if (io) {
         const gameNsp = io.of("/game");
-        gameNsp.on("connection", (socket) => {
+        gameNsp.on("connection", async (socket) => {
             const auth = socket.handshake.auth || {};
             const matchId = Number(auth.matchId);
-            const userId = Number(auth.userId);
-            const username = typeof auth.username === "string" && auth.username.trim()
-                ? auth.username.trim()
-                : `P${userId}`;
-            if (!Number.isFinite(matchId) || !Number.isFinite(userId)) {
+            const token =
+                (auth as any).token ||
+                (typeof socket.handshake.headers.authorization === "string"
+                    ? socket.handshake.headers.authorization.replace("Bearer ", "")
+                    : null);
+            if (!Number.isFinite(matchId)) {
                 socket.disconnect(true);
                 return;
+            }
+
+            const userIdQuery = Number(auth.userId);
+            let userId = userIdQuery;
+            let username: string | null = typeof auth.username === "string" ? auth.username.trim() : null;
+            if (token) {
+                try {
+                    const decoded = await (fastify as any).jwt.verify(token);
+                    const tokenUserId = Number(decoded?.id || decoded?.userId || decoded?.sub);
+                    if (Number.isFinite(tokenUserId)) {
+                        userId = tokenUserId;
+                    }
+                    if (typeof decoded?.username === "string") {
+                        username = decoded.username.trim();
+                    }
+                } catch (err) {
+                    // ignore token errors; we'll fall back to provided userId
+                }
+            }
+
+            if (!Number.isFinite(userId)) {
+                if (!Number.isFinite(userIdQuery)) {
+                    socket.emit("error", { message: "Unauthorized" });
+                    socket.disconnect(true);
+                    return;
+                }
+                userId = userIdQuery;
             }
 
             const match = matches.get(matchId);
-            if (!match || !match.players.includes(userId)) {
-                socket.emit("error", { message: "Forbidden" });
+            if (!match) {
+                socket.emit("error", { message: "Match not found" });
                 socket.disconnect(true);
                 return;
             }
+            if (!match.players.includes(userId)) {
+                const resolved = resolvePlayerId(match, [userId, userIdQuery]);
+                if (resolved === null) {
+                    socket.emit("error", { message: "Forbidden" });
+                    socket.disconnect(true);
+                    return;
+                }
+                userId = resolved;
+            }
 
-            match.names[userId] = username;
+            if (!username) {
+                try {
+                    const lookupUsername = (fastify as any).lookupUsername as (id: number) => Promise<string>;
+                    if (lookupUsername) {
+                        username = await lookupUsername(userId);
+                    }
+                } catch {
+                    /* noop */
+                }
+            }
+            match.names[userId] = username || `User ${userId}`;
             match.ioSockets.set(userId, socket);
+            clearIdleCleanup(match);
             const index = match.players.indexOf(userId) + 1;
             socket.emit("identify", { index });
             socket.emit("state", {
@@ -281,6 +490,16 @@ export function setupGameWS(fastify: FastifyInstance) {
                     ballRadius: BALL_RADIUS
                 }
             });
+            broadcastReady(match);
+            broadcast(match, {
+                type: "state",
+                state: match.state,
+                scores: match.scores,
+                names: buildNames(match),
+            });
+            if (match.servePending) {
+                socket.emit("waitServe", { server: match.serverIndex });
+            }
 
             socket.on("paddle", (data: any) => {
                 // Only accept moves if this user is mapped in players list
@@ -300,16 +519,51 @@ export function setupGameWS(fastify: FastifyInstance) {
             socket.on("ready", () => {
                 match.ready.add(userId);
                 broadcastReady(match);
-                tryStartCountdown(match);
+                if (match.paused) {
+                    if (match.ready.size === match.players.length) {
+                        match.paused = false;
+                        broadcast(match, { type: "resume" });
+                        tryStartCountdown(match);
+                    }
+                } else {
+                    tryStartCountdown(match);
+                }
+            });
+
+            socket.on("serve", () => {
+                if (!match.started || !match.servePending) return;
+                const idx = match.players.indexOf(userId) + 1;
+                if (idx !== match.serverIndex) return;
+                match.servePending = false;
+                launchBall(match.state.ball);
+                broadcast(match, {
+                    type: "serve",
+                    server: idx,
+                    state: match.state,
+                    scores: match.scores,
+                    names: buildNames(match),
+                });
             });
 
             socket.on("disconnect", () => {
                 match.ioSockets.delete(userId);
                 match.ready.delete(userId);
                 stopCountdown(match);
+                resetPaddles(match);
+                match.state.ball.x = ARENA_W / 2;
+                match.state.ball.y = ARENA_H / 2;
+                match.state.ball.vx = 0;
+                match.state.ball.vy = 0;
+                match.started = false;
+                match.servePending = true;
                 broadcastReady(match);
-                if (match.ioSockets.size === 0 && match.sockets.size === 0) {
-                    matches.delete(match.matchId);
+                const remaining = connectionCount(match);
+                if (remaining < match.players.length) {
+                    match.paused = true;
+                    broadcast(match, { type: "pause", reason: "disconnected" });
+                }
+                if (remaining === 0) {
+                    scheduleIdleCleanup(match);
                 }
             });
         });
@@ -318,16 +572,24 @@ export function setupGameWS(fastify: FastifyInstance) {
     // ---------------------------
     // API endpoints
     // ---------------------------
-    fastify.post<{ Body: { userId: number } }>("/api/join-duo", async (req) => {
-        const matchId = joinDuoQueue(req.body.userId);
+    fastify.post<{ Body: { userId?: number } }>("/api/join-duo", async (req, reply) => {
+        const authId = authUserIdFromHeaders(req);
+        const bodyId = Number((req.body as any)?.userId);
+        const userId = Number.isFinite(authId) ? authId! : bodyId;
+        if (!Number.isFinite(userId)) {
+            return reply.code(400).send({ ok: false, error: "userId required" });
+        }
+        const matchId = joinDuoQueue(userId);
         return matchId === -1
             ? { ok: true, status: "waiting" }
             : { ok: true, status: "matched", matchId };
     });
 
-    fastify.get<{ Querystring: { userId: string } }>("/api/join-duo/status", async (req) => {
-        const userId = Number(req.query.userId);
-        if (duoStatus[userId]) {
+    fastify.get<{ Querystring: { userId?: string } }>("/api/join-duo/status", async (req) => {
+        const authId = authUserIdFromHeaders(req);
+        const queryId = Number(req.query.userId);
+        const userId = Number.isFinite(authId) ? authId! : queryId;
+        if (Number.isFinite(userId) && duoStatus[userId]) {
             const matchId = duoStatus[userId];
             delete duoStatus[userId];
             return { ok: true, status: "matched", matchId };
@@ -335,16 +597,34 @@ export function setupGameWS(fastify: FastifyInstance) {
         return { ok: true, status: "waiting" };
     });
 
-    fastify.post<{ Body: { userId: number } }>("/api/join-quad", async (req) => {
-        const matchId = joinQuadQueue(req.body.userId);
+    fastify.post<{ Body: { userId?: number } }>("/api/join-quad", async (req, reply) => {
+        const authId = authUserIdFromHeaders(req);
+        const bodyId = Number((req.body as any)?.userId);
+        const userId = Number.isFinite(authId) ? authId! : bodyId;
+        if (!Number.isFinite(userId)) {
+            return reply.code(400).send({ ok: false, error: "userId required" });
+        }
+        const matchId = joinQuadQueue(userId);
         return matchId === -1
             ? { ok: true, status: "waiting" }
             : { ok: true, status: "matched", matchId };
     });
 
-    fastify.get<{ Querystring: { userId: string } }>("/api/join-quad/status", async (req) => {
-        const userId = Number(req.query.userId);
-        if (quadStatus[userId]) {
+    // Match status (validate resume)
+    fastify.get<{ Querystring: { matchId: string } }>("/api/match/status", async (req, reply) => {
+        const matchId = Number(req.query.matchId);
+        if (!Number.isFinite(matchId)) {
+            return reply.code(400).send({ ok: false, error: "matchId required" });
+        }
+        const status = getMatchStatus(matchId);
+        reply.send(status);
+    });
+
+    fastify.get<{ Querystring: { userId?: string } }>("/api/join-quad/status", async (req) => {
+        const authId = authUserIdFromHeaders(req);
+        const queryId = Number(req.query.userId);
+        const userId = Number.isFinite(authId) ? authId! : queryId;
+        if (Number.isFinite(userId) && quadStatus[userId]) {
             const matchId = quadStatus[userId];
             delete quadStatus[userId];
             return { ok: true, status: "matched", matchId };
@@ -353,13 +633,23 @@ export function setupGameWS(fastify: FastifyInstance) {
     });
 
     // Allow clients to cancel matchmaking to avoid stale queue entries
-    fastify.post<{ Body: { userId: number } }>("/api/join-duo/cancel", async (req) => {
-        cancelFromQueue(req.body.userId, duoQueue, duoStatus);
+    fastify.post<{ Body: { userId?: number } }>("/api/join-duo/cancel", async (req) => {
+        const authId = authUserIdFromHeaders(req);
+        const bodyId = Number((req.body as any)?.userId);
+        const userId = Number.isFinite(authId) ? authId! : bodyId;
+        if (Number.isFinite(userId)) {
+            cancelFromQueue(userId, duoQueue, duoStatus);
+        }
         return { ok: true };
     });
 
-    fastify.post<{ Body: { userId: number } }>("/api/join-quad/cancel", async (req) => {
-        cancelFromQueue(req.body.userId, quadQueue, quadStatus);
+    fastify.post<{ Body: { userId?: number } }>("/api/join-quad/cancel", async (req) => {
+        const authId = authUserIdFromHeaders(req);
+        const bodyId = Number((req.body as any)?.userId);
+        const userId = Number.isFinite(authId) ? authId! : bodyId;
+        if (Number.isFinite(userId)) {
+            cancelFromQueue(userId, quadQueue, quadStatus);
+        }
         return { ok: true };
     });
 }
@@ -448,13 +738,19 @@ function tryStartCountdown(match: Match) {
 
         stopCountdown(match);
         match.started = true;
-        launchBall(match.state.ball);
+        match.servePending = true;
+        resetPaddles(match);
+        match.state.ball.vx = 0;
+        match.state.ball.vy = 0;
         broadcast(match, {
             type: "start",
             state: match.state,
             scores: match.scores,
             names: buildNames(match),
+            waitServe: true,
+            server: match.serverIndex,
         });
+        broadcast(match, { type: "waitServe", server: match.serverIndex });
     }, 1000);
 }
 
@@ -519,7 +815,16 @@ async function recordMatch(match: Match, winnerKey: string) {
 
 function handleScore(match: Match, scorerKey: string) {
     match.scores[scorerKey] = (match.scores[scorerKey] || 0) + 1;
-    resetBall(match.state.ball);
+    resetPaddles(match);
+    // stop ball and wait for serve
+    match.state.ball.x = ARENA_W / 2;
+    match.state.ball.y = ARENA_H / 2;
+    match.state.ball.vx = 0;
+    match.state.ball.vy = 0;
+    match.servePending = true;
+    // rotate server
+    const nextServer = (match.serverIndex % match.players.length) + 1;
+    match.serverIndex = nextServer;
 
     broadcast(match, {
         type: "state",
@@ -527,6 +832,7 @@ function handleScore(match: Match, scorerKey: string) {
         scores: match.scores,
         names: buildNames(match),
     });
+    broadcast(match, { type: "waitServe", server: match.serverIndex });
 
     const reached = match.scores[scorerKey] >= WIN_SCORE;
     if (reached) {
@@ -540,7 +846,10 @@ function handleScore(match: Match, scorerKey: string) {
 }
 
 function stepPhysics(match: Match) {
-    if (!match.started) {
+    if (match.paused) {
+        return;
+    }
+    if (!match.started || match.servePending) {
         broadcast(match, {
             type: "state",
             state: match.state,

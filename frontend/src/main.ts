@@ -2,14 +2,26 @@
 import { showHome } from "./home";
 import { showGame } from "./pong";
 import { showTournament } from "./tournament";
-import { sendFriendRequest, acceptFriend, getFriends, getIncomingRequests, getSentRequests, blockFriend, unblockFriend, getMatchHistory, fetchUserMe } from "./api";
-import { setup2FA, verify2FA, disable2FA } from "./api";
+import {
+    sendFriendRequest,
+    acceptFriend,
+    getFriends,
+    getIncomingRequests,
+    getSentRequests,
+    blockFriend,
+    unblockFriend,
+    getMatchHistory,
+    fetchUserMe,
+    getUserProfile,
+    setup2FA,
+    verify2FA,
+    disable2FA,
+    createTournament,
+    getLeaderboard,
+} from "./api";
 import { io } from "socket.io-client";
-import { renderRankings } from "./rankings";
-import { renderPlayers } from "./players";
 import { renderMatches } from "./matches";
 import { renderTournaments } from "./tournamentinfor";
-import { getLeaderboard } from "./api";
 // -------------------------
 // Global state
 // -------------------------
@@ -44,7 +56,7 @@ async function ensureCurrentUser() {
 // -------------------------
 // Profile rendering (current user)
 // -------------------------
-function loadProfile() {
+async function loadProfile(userId?: number) {
     const usernameEl = document.getElementById("profile-username");
     const emailEl = document.getElementById("profile-email");
     const eloEl = document.getElementById("profile-elo");
@@ -52,21 +64,33 @@ function loadProfile() {
     const winrateEl = document.getElementById("profile-winrate");
     const avatarEl = document.getElementById("profile-avatar") as HTMLImageElement | null;
 
+    let profile = me;
+    if (Number.isFinite(userId) && userId !== me?.id) {
+        try {
+            const res = await getUserProfile(Number(userId));
+            if ((res as any)?.user) {
+                profile = (res as any).user;
+            }
+        } catch (err) {
+            console.warn("Failed to load user profile, falling back to current user:", err);
+        }
+    }
+
     const safe = (v: any, fallback: string = "—") => (v === null || v === undefined || v === "" ? fallback : v);
 
-    usernameEl && (usernameEl.textContent = safe(me.username));
-    emailEl && (emailEl.textContent = safe(me.email));
-    eloEl && (eloEl.textContent = safe(me.elo ?? me.rank ?? "—"));
-    matchesEl && (matchesEl.textContent = safe(me.matches_played ?? me.matches ?? "0"));
+    usernameEl && (usernameEl.textContent = safe(profile.username));
+    emailEl && (emailEl.textContent = safe(profile.email));
+    eloEl && (eloEl.textContent = safe(profile.elo ?? profile.rank ?? "—"));
+    matchesEl && (matchesEl.textContent = safe(profile.matches_played ?? profile.matches ?? "0"));
     if (winrateEl) {
         const wr =
-            me.winrate !== undefined && me.winrate !== null
-                ? `${Number(me.winrate).toFixed(1)}%`
+            profile.winrate !== undefined && profile.winrate !== null
+                ? `${Number(profile.winrate).toFixed(1)}%`
                 : "—";
         winrateEl.textContent = wr;
     }
-    if (avatarEl && me.avatar) {
-        avatarEl.src = me.avatar;
+    if (avatarEl && profile.avatar) {
+        avatarEl.src = profile.avatar;
     }
 }
 // ------------------------------
@@ -94,9 +118,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         const playQuadBtn = document.getElementById("playQuadBtn");
         const playQuadLocalBtn = document.getElementById("playQuadLocalBtn");
         const viewTournamentBtn = document.getElementById("viewtournamentBtn");   
+        const quickAliasTournamentBtn = document.getElementById("quickAliasTournamentBtn");
 
         playDuoBtn?.addEventListener("click", () => {
-            showGame(gameContainer, "duo");
+            showGame(gameContainer, "duo", { source: "matchmaking" });
         });
 
         playDuoLocalBtn?.addEventListener("click", () => {
@@ -104,7 +129,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         });
 
         playQuadBtn?.addEventListener("click", () => {
-            showGame(gameContainer, "quad");
+            showGame(gameContainer, "quad", { source: "matchmaking" });
         });
 
         playQuadLocalBtn?.addEventListener("click", () => {
@@ -114,7 +139,72 @@ window.addEventListener("DOMContentLoaded", async () => {
         // bouton "View Tournaments" dans les quick actions
         viewTournamentBtn?.addEventListener("click", () => {
             window.location.hash = "#tournament";
-        });        
+        });  
+        quickAliasTournamentBtn?.addEventListener("click", () => {
+            (async () => {
+                if (!me?.id) {
+                    alert("You must be logged in to start an alias-only tournament.");
+                    return;
+                }
+                const name = `Alias tournament ${new Date().toLocaleString()}`;
+                try {
+                    const res = await createTournament({
+                        name,
+                        max_players: 8,
+                        admin_id: me.id,
+                        is_private: 0,
+                        mode: "offline",
+                    });
+                    const tid = res.tournament_id || res.id;
+                    if (tid) {
+                        sessionStorage.setItem("activeTournamentId", String(tid));
+                        localStorage.setItem("activeTournamentId", String(tid));
+                    }
+                    window.location.hash = "#tournament";
+                } catch (err: any) {
+                    alert(err?.message || "Failed to create alias-only tournament");
+                }
+            })();
+        });      
+
+        const resumeOnlineBtn = document.getElementById("resumeOnlineBtn") as HTMLButtonElement | null;
+        const storedMatchId = localStorage.getItem("lastOnlineMatchId");
+        const storedMode = localStorage.getItem("lastOnlineMatchMode");
+        const storedSource = localStorage.getItem("lastOnlineMatchSource");
+        if (resumeOnlineBtn) {
+            if (storedMatchId && storedSource === "matchmaking") {
+                resumeOnlineBtn.disabled = false;
+            } else {
+                resumeOnlineBtn.disabled = true;
+            }
+            resumeOnlineBtn.addEventListener("click", () => {
+                if (!storedMatchId || storedSource !== "matchmaking") return;
+                const matchId = Number(storedMatchId);
+                if (!Number.isFinite(matchId)) return;
+                const mode = storedMode === "quad" ? "quad" : "duo";
+                // Validate status before trying to join
+                fetch(`/api/match/status?matchId=${matchId}`)
+                    .then((r) => r.json())
+                    .then((data) => {
+                        if (!data?.active) {
+                            localStorage.removeItem("lastOnlineMatchId");
+                            localStorage.removeItem("lastOnlineMatchMode");
+                            localStorage.removeItem("lastOnlineMatchSource");
+                            resumeOnlineBtn.disabled = true;
+                            alert("No active match to resume.");
+                            return;
+                        }
+                        if (!data.players || !data.players.includes(Number(me?.id))) {
+                            alert("You are not part of this match anymore.");
+                            return;
+                        }
+                        showGame(gameContainer, mode, { matchId, source: "matchmaking" });
+                    })
+                    .catch(() => {
+                        alert("Unable to check match status. Try again.");
+                    });
+            });
+        }
     }
 
     // -------------------------
@@ -135,11 +225,6 @@ window.addEventListener("DOMContentLoaded", async () => {
                 showHome(app);
                 bindHomeButtons();
                 break;
-            case "#players":
-                await ensureCurrentUser();
-                renderPlayers(app);
-                break;
-
             case "#matchesinfor":
                 await ensureCurrentUser();
                 renderMatches(app);
@@ -150,13 +235,8 @@ window.addEventListener("DOMContentLoaded", async () => {
                 renderTournaments(app);
                 break;
 
-            case "#rankings":
-                await ensureCurrentUser();
-                renderRankings(app);
-                break;
-
             case "#tournament":
-                showTournament(app);
+                await showTournament(app);
                 break;
 
             case "#friends":
@@ -168,7 +248,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             case "#matches":
                 document.getElementById("matches-panel")!.classList.remove("hidden");
                 await ensureCurrentUser();
-                await window.showMatchesPanel();
+                await window.showMatchesPanel(window.currentUserId);
                 break;
 
             case "#leaderboard":
@@ -180,7 +260,10 @@ window.addEventListener("DOMContentLoaded", async () => {
             case "#profile":
                 document.getElementById("profile-panel")!.classList.remove("hidden");
                 await ensureCurrentUser();
-                loadProfile();
+                const profileTargetRaw = sessionStorage.getItem("profileUserId");
+                const profileTarget = profileTargetRaw ? Number(profileTargetRaw) : undefined;
+                await loadProfile(Number.isFinite(profileTarget) ? Number(profileTarget) : undefined);
+                sessionStorage.removeItem("profileUserId");
                 break;
 
             case "#auth":
@@ -207,7 +290,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     window.location.hash = "#home";
   });
     document.getElementById("tournamentBtn")?.addEventListener("click", () => (window.location.hash = "#tournament"));
-    document.getElementById("matchesBtn")?.addEventListener("click", () => (window.location.hash = "#matches"));
+    document.getElementById("matchesBtn")?.addEventListener("click", (e) => {
+        e.preventDefault?.();
+        window.location.hash = "#matchesinfor";
+    });
     document.getElementById("leaderboardBtn")?.addEventListener("click", () => (window.location.hash = "#leaderboard"));
 
     // Dropdown buttons
@@ -256,7 +342,12 @@ function initSocket() {
     const token = localStorage.getItem("jwt");
     if (!token) return;
 
-    socket = io("https://saul-unsubpoenaed-lakeisha.ngrok-free.dev", { auth: { token } });
+    const socketUrl = (window as any).SOCKET_URL || window.location.origin;
+    socket = io(socketUrl, { auth: { token }, withCredentials: true });
+    (window as any).appSocket = socket;
+    socket.on("connect", () => {
+        console.log("[socket] Connected as", token);
+    });
 
     // Friend online/offline updates
     socket.on("user:online", ({ userId }: { userId: number }) => updateFriendStatus(userId, true));
@@ -327,11 +418,16 @@ async function loadFriendList() {
         const item = document.createElement("div");
         item.id = `friend-${friend.id}`;
         item.setAttribute("data-user-id", friend.id.toString());
-        item.className = "p-2 border rounded mb-1 flex justify-between items-center";
+        item.className = "p-2 border rounded mb-1 flex justify-between items-center gap-3";
 
         item.innerHTML = `
-            <span class="text-gray-500">${friend.username}</span>
-            <span class="status text-gray-500">○ offline</span>
+            <div class="flex items-center gap-2">
+                <span class="text-gray-500">${friend.username}</span>
+                <span class="status text-gray-500">○ offline</span>
+            </div>
+            <button class="block-btn px-2 py-1 bg-red-600 text-white text-xs rounded" data-id="${friend.id}">
+                Block
+            </button>
         `;
 
         container.appendChild(item);
@@ -428,8 +524,10 @@ document.addEventListener("click", async (e) => {
     if (target.classList.contains("accept-btn")) {
         const requesterId = Number(target.dataset.id);
         await acceptFriend(requesterId);
+        await blockFriend(userId);
         loadIncomingRequests();
         loadSentRequests();
+        loadFriendList();
     }
 
     // -------------------------------
@@ -468,8 +566,10 @@ document.addEventListener("click", async (e) => {
 
         // backend update + reload
         await unblockFriend(userId);
+        await unblockFriend(userId);
         loadIncomingRequests();
         loadSentRequests();
+        loadFriendList();
     }
 });
 
