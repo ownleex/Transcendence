@@ -272,7 +272,7 @@
                                     role="menuitem" data-target="matches-panel">
                                 Matches
                             </button>
-                            <button type="button" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                            <button id="authMenuBtn" type="button" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                                     role="menuitem" data-target="authentication-panel">
                                 Authentication
                             </button>
@@ -851,6 +851,24 @@
                 const shouldOpen = (typeof open === 'boolean') ? open : !isOpen;
 
                 if (shouldOpen) {
+                    // Check if user has password and hide/show authentication button accordingly
+                    const authBtn = document.getElementById('authMenuBtn');
+                    if (authBtn) {
+                        try {
+                            const me = JSON.parse(localStorage.getItem('me') || '{}');
+                            // Hide authentication button if user has no password (OAuth users)
+                            // has_password is 1 for users with password, 0 for OAuth users
+                            if (!me.has_password || me.has_password === 0) {
+                                authBtn.style.display = 'none';
+                            } else {
+                                authBtn.style.display = 'block';
+                            }
+                        } catch (e) {
+                            // If error parsing, show the button by default
+                            authBtn.style.display = 'block';
+                        }
+                    }
+
                     dropdown.classList.remove('hidden');
                     menuBtn.setAttribute('aria-expanded', 'true');
                     chevron.classList.add('rotate-180');
