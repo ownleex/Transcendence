@@ -544,11 +544,21 @@ fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (re
                 return reply.code(409).send({ success: false, error: "Nickname already taken" });
             }
 
-            // Update nickname for this player
-            await fastify.db.run(
+            // On tente de mettre à jour le pseudo existant
+            const result = await fastify.db.run(
                 "UPDATE Player SET nickname = ? WHERE user_id = ?",
                 [trimmedNick, userId]
             );
+
+            // Si aucune ligne n'a été modifiée (result.changes === 0), c'est que le joueur
+            // n'existait pas encore dans la table Player. On doit donc le créer.
+            if (result.changes === 0) {
+                await fastify.db.run(
+                    "INSERT INTO Player (user_id, tournament_id, nickname) VALUES (?, 1, ?)",
+                    [userId, trimmedNick]
+                );
+            }
+            
             // Fetch updated user profile
             const updatedUser = await getFullUserProfile(fastify.db, userId);
 
