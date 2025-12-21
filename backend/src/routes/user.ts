@@ -136,6 +136,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
             u.email,
             u.avatar,
             u.twofa_secret,
+            CASE WHEN u.password IS NOT NULL AND u.password != '' THEN 1 ELSE 0 END as has_password,
             p.nickname,
             COALESCE(us.elo, p.elo, 1000) as elo,
             p.rank,

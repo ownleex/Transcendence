@@ -392,7 +392,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.send({
         success: true,
         token: jwt,
-        user: { id: user.id, username: user.username, email: user.email ?? null }
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email ?? null,
+          has_password: user.password && user.password !== '' ? 1 : 0
+        }
       });
 
     } catch (err: unknown) {
