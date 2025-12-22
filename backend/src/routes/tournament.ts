@@ -32,6 +32,18 @@ async function ensureTournamentSchema(db: DB) {
   if (!names.includes("mode")) {
     await db.run(`ALTER TABLE "Tournament" ADD COLUMN mode TEXT DEFAULT 'online'`);
   }
+  if (!names.includes("BlockchainBlockNumber")) {
+    await db.run(`ALTER TABLE "Tournament" ADD COLUMN BlockchainBlockNumber INTEGER`);
+  }
+  if (!names.includes("BlockchainTxHash")) {
+    await db.run(`ALTER TABLE "Tournament" ADD COLUMN BlockchainTxHash TEXT`);
+  }
+  if (!names.includes("BlockchainExplorerUrl")) {
+    await db.run(`ALTER TABLE "Tournament" ADD COLUMN BlockchainExplorerUrl TEXT`);
+  }
+  if (!names.includes("BlockchainContractUrl")) {
+    await db.run(`ALTER TABLE "Tournament" ADD COLUMN BlockchainContractUrl TEXT`);
+  }
 }
 
 async function fetchTournamentPlayers(db: DB, tournamentId: number) {
@@ -78,6 +90,25 @@ async function resolvePlayerName(db: DB, playerId: number) {
     [playerId]
   );
   return { name: row?.name ?? `Player ${playerId}`, avatar: row?.avatar ?? null };
+}
+
+async function persistBlockchainResult(db: DB, tournamentId: number, blockchainResult: any) {
+  if (!blockchainResult) return;
+  await db.run(
+    `UPDATE Tournament 
+       SET BlockchainBlockNumber = ?, 
+           BlockchainTxHash = ?, 
+           BlockchainExplorerUrl = ?, 
+           BlockchainContractUrl = ?
+     WHERE tournament_id = ?`,
+    [
+      blockchainResult.blockNumber ?? null,
+      blockchainResult.txHash ?? null,
+      blockchainResult.explorerUrl ?? null,
+      blockchainResult.contractUrl ?? null,
+      tournamentId,
+    ]
+  );
 }
 
 async function recordTournamentMatch(db: DB, player1Id: number, player2Id: number, score1: number, score2: number) {
@@ -138,6 +169,7 @@ async function recordTournamentMatch(db: DB, player1Id: number, player2Id: numbe
 async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
   const db = (fastify as any).db;
   await ensureMatchSchema(db);
+  let blockchainResult: any | undefined;
 
   const matches = await db.all(
     `SELECT m.*
@@ -222,12 +254,15 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
     const tournamentRow = await db.get(`SELECT name FROM Tournament WHERE tournament_id = ?`, [tournamentId]);
     if (tournamentRow?.name && winnerName) {
       try {
-        await blockchainService.recordTournament(tournamentRow.name, winnerName, 8);
+        blockchainResult = await blockchainService.recordTournament(tournamentRow.name, winnerName, 8);
+        await persistBlockchainResult(db, tournamentId, blockchainResult);
       } catch (err) {
         fastify.log.error({ err }, "Failed to push tournament result to blockchain");
       }
     }
   }
+
+  return blockchainResult;
 }
 
 export default async function tournamentRoutes(fastify: FastifyInstance) {
@@ -715,7 +750,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
         await recordTournamentMatch((fastify as any).db, match.player1, match.player2, score1 ?? 0, score2 ?? 0);
       }
 
-      await progressBracket(fastify, tournamentId);
+      const blockchainResult = await progressBracket(fastify, tournamentId);
       const liveMap: Map<number, { gameId: number; createdAt: number }> = (fastify as any).tournamentLiveMatches;
       liveMap?.delete(matchIdNum);
 
@@ -726,7 +761,14 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
       let payload: any = { success: true };
       if (bracket.statusCode === 200) {
         // fastify.inject returns a response with .payload as string
-        payload = (bracket as any).json ? (bracket as any).json() : JSON.parse((bracket as any).payload || "{}");
+        const bracketJson = (bracket as any).json
+          ? (bracket as any).json()
+          : JSON.parse((bracket as any).payload || "{}");
+        payload = { ...bracketJson, success: true };
+      }
+      if (blockchainResult) payload.blockchain = blockchainResult;
+      if (blockchainResult) {
+        await persistBlockchainResult((fastify as any).db, tournamentId, blockchainResult);
       }
 
       reply.send(payload);
@@ -770,6 +812,7 @@ export default async function tournamentRoutes(fastify: FastifyInstance) {
               tournamentData.WinnerName,
               tournamentData.playerCount || 8
         );
+        await persistBlockchainResult((fastify as any).db, Number(id), blockchainResult);
         
         // 👇 On l'envoie au frontend dans la réponse
         return reply.send({ 
