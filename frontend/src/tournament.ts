@@ -248,7 +248,7 @@ export async function showTournament(container: HTMLElement) {
                         </div>
                         <div class="flex gap-2 items-center flex-wrap">
                             <select id="tournamentSelector" class="border rounded px-2 py-1 text-sm">${optionsHtml}</select>
-                            <button id="refreshBracket" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded">Refresh</button>
+                            <button id="refreshBracket" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 text-white rounded">Refresh</button>
                             ${joinable ? `<button id="joinTournament" class="px-3 py-1 bg-blue-600 text-white rounded">Join with alias or account</button>` : ""}
                             ${isInTournament ? `<button id="leaveTournament" class="px-3 py-1 bg-red-600 text-white rounded">Leave</button>` : ""}
                             <button id="newTournament" class="px-3 py-1 bg-indigo-600 text-white rounded">New tournament</button>
@@ -363,7 +363,6 @@ export async function showTournament(container: HTMLElement) {
                 }
             } else if (tournament.status === "ongoing") {
                 sessionStorage.removeItem(`tournament-blockchain-${tournament.tournament_id}`);
-                // ------------------------------------------------
 
                 blockchainContainer.innerHTML = `
                     <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex items-center gap-2">
@@ -372,12 +371,26 @@ export async function showTournament(container: HTMLElement) {
                     </div>
                 `;
             } else if (tournament.status === "finished") {
-                blockchainContainer.innerHTML = `
-                    <div class="p-4 bg-amber-50 border border-amber-200 rounded text-amber-800 flex items-center gap-2">
-                        <span class="animate-pulse">⌛</span>
-                        <span>Tournament finished. Recording on the blockchain...</span>
-                    </div>
-                `;
+                if (isOnlineMode) {
+                    blockchainContainer.innerHTML = `
+                        <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="animate-pulse">🌐</span>
+                                <span>Tournament finished. Recording on the blockchain...</span>
+                            </div>
+                            <div class="text-sm">
+                                Please wait a few seconds, then click on the "Refresh" button
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    blockchainContainer.innerHTML = `
+                        <div class="p-4 bg-amber-50 border border-amber-200 rounded text-amber-800 flex items-center gap-2">
+                            <span class="animate-pulse">⌛</span>
+                            <span>Tournament finished. Recording on the blockchain... The page will reload automatically.</span>
+                        </div>
+                    `;
+                }
             } else {
                 blockchainContainer.innerHTML = "";
             }
