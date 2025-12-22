@@ -577,12 +577,10 @@ fastify.put("/displayname", { preHandler: [fastify.authenticate] }, async (req, 
         }
         
         // 4. Récupérer le profil mis à jour pour le renvoyer
-        // Note: getFullUserProfile utilise LEFT JOIN sur Player, donc ça fonctionnera même si l'INSERT a échoué.
         const updatedUser = await getFullUserProfile(fastify.db, userId);
 
         reply.send({ success: true, user: updatedUser });
     } catch (err: any) {
-        // Astuce de prof : Log l'erreur pour le débuggage serveur
         req.log.error(err);
         reply.code(500).send({ success: false, error: err.message });
     }
