@@ -360,6 +360,9 @@ export async function showTournament(container: HTMLElement) {
                     /* ignore storage errors */
                 }
             } else if (tournament.status === "ongoing") {
+                sessionStorage.removeItem(`tournament-blockchain-${tournament.tournament_id}`);
+                // ------------------------------------------------
+
                 blockchainContainer.innerHTML = `
                     <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex items-center gap-2">
                         <span class="animate-pulse">⏳</span>
