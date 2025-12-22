@@ -96,8 +96,10 @@ function renderBlockchainCard(container: HTMLElement, bc: BlockchainResult) {
             <h2 class="text-2xl font-bold text-green-800 mb-4">🏆 Certified tournament</h2>
             
             <div class="space-y-3 text-left">
-
-
+                <div class="flex items-center">
+                    <span class="font-semibold w-24">Block :</span>
+                    <span class="font-mono bg-white px-2 py-1 rounded border">${bc.blockNumber ?? "?"}</span>
+                </div>
                 <div class="flex items-center">
                     <span class="font-semibold w-24">Proof :</span>
                     <a href="${bc.explorerUrl || "#"}" target="_blank" class="text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
@@ -360,6 +362,9 @@ export async function showTournament(container: HTMLElement) {
                     /* ignore storage errors */
                 }
             } else if (tournament.status === "ongoing") {
+                sessionStorage.removeItem(`tournament-blockchain-${tournament.tournament_id}`);
+                // ------------------------------------------------
+
                 blockchainContainer.innerHTML = `
                     <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex items-center gap-2">
                         <span class="animate-pulse">⏳</span>
@@ -530,7 +535,12 @@ export async function showTournament(container: HTMLElement) {
                                         scores
                                     );
                                     if (isFinalMatch) {
-                                        await finishTournament(tournament.tournament_id, container, resultPayload?.blockchain);
+                                        await loadAndRender();
+                                        const bcContainer = document.getElementById("blockchainCard");
+                                        if (bcContainer) {
+                                            await finishTournament(tournament.tournament_id, bcContainer, resultPayload?.blockchain);
+                                            await loadAndRender();
+                                        }
                                         return;
                                     }
                                     await loadAndRender();
@@ -627,7 +637,12 @@ export async function showTournament(container: HTMLElement) {
                                 scores
                             );
                             if (isFinalMatch) {
-                                await finishTournament(tournament.tournament_id, container, resultPayload?.blockchain);
+                                await loadAndRender();
+                                const bcContainer = document.getElementById("blockchainCard");
+                                if (bcContainer) {
+                                    await finishTournament(tournament.tournament_id, bcContainer, resultPayload?.blockchain);
+                                    await loadAndRender();
+                                }
                                 return;
                             }
                         } catch (err) {
@@ -703,7 +718,12 @@ export async function showTournament(container: HTMLElement) {
                                     scores
                                 );
                                 if (isFinalAuto) {
-                                    await finishTournament(payload.tournamentId, container, resultPayload?.blockchain);
+                                    await loadAndRender();
+                                    const bcContainer = document.getElementById("blockchainCard");
+                                    if (bcContainer) {
+                                        await finishTournament(payload.tournamentId, bcContainer, resultPayload?.blockchain);
+                                        await loadAndRender();
+                                    }
                                     return;
                                 }
                                 await loadAndRender();
