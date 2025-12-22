@@ -535,7 +535,12 @@ export async function showTournament(container: HTMLElement) {
                                         scores
                                     );
                                     if (isFinalMatch) {
-                                        await finishTournament(tournament.tournament_id, container, resultPayload?.blockchain);
+                                        await loadAndRender();
+                                        const bcContainer = document.getElementById("blockchainCard");
+                                        if (bcContainer) {
+                                            await finishTournament(tournament.tournament_id, bcContainer, resultPayload?.blockchain);
+                                            await loadAndRender();
+                                        }
                                         return;
                                     }
                                     await loadAndRender();
@@ -632,7 +637,12 @@ export async function showTournament(container: HTMLElement) {
                                 scores
                             );
                             if (isFinalMatch) {
-                                await finishTournament(tournament.tournament_id, container, resultPayload?.blockchain);
+                                await loadAndRender();
+                                const bcContainer = document.getElementById("blockchainCard");
+                                if (bcContainer) {
+                                    await finishTournament(tournament.tournament_id, bcContainer, resultPayload?.blockchain);
+                                    await loadAndRender();
+                                }
                                 return;
                             }
                         } catch (err) {
@@ -708,7 +718,12 @@ export async function showTournament(container: HTMLElement) {
                                     scores
                                 );
                                 if (isFinalAuto) {
-                                    await finishTournament(payload.tournamentId, container, resultPayload?.blockchain);
+                                    await loadAndRender();
+                                    const bcContainer = document.getElementById("blockchainCard");
+                                    if (bcContainer) {
+                                        await finishTournament(payload.tournamentId, bcContainer, resultPayload?.blockchain);
+                                        await loadAndRender();
+                                    }
                                     return;
                                 }
                                 await loadAndRender();
