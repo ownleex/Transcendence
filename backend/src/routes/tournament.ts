@@ -171,7 +171,8 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
   await ensureMatchSchema(db);
   let blockchainResult: any | undefined;
 
-  const matches = await db.all(
+  // 1. Récupération de TOUS les matchs (y compris les potentiels doublons)
+  let matches = await db.all(
     `SELECT m.*
      FROM Match m
      WHERE m.tournament_id = ?
@@ -181,27 +182,87 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
     [tournamentId]
   );
 
+  // --- DÉBUT BLOC NETTOYAGE (SANITIZATION) ---
+  const uniqueMatchesMap = new Map<string, any>();
+  const idsToDelete: number[] = [];
+
+  for (const m of matches) {
+    const key = `${m.round}-${m.slot}`; // Ex: "semi-1", "final-1"
+
+    if (!uniqueMatchesMap.has(key)) {
+      uniqueMatchesMap.set(key, m);
+    } else {
+      // CONFLIT DÉTECTÉ : On a déjà un match pour ce slot !
+      const existing = uniqueMatchesMap.get(key);
+
+      // On décide lequel garder :
+      // Priorité à celui qui a un 'winner' défini. Sinon, on garde le plus ancien (ID plus petit).
+      let keepCurrent = false;
+      if (m.winner && !existing.winner) {
+          keepCurrent = true;
+      } else if (!m.winner && existing.winner) {
+          keepCurrent = false;
+      } else {
+          // Si égalité (les deux ont un winner ou aucun n'en a), on garde le premier créé (ID min)
+          if (m.match_id < existing.match_id) keepCurrent = true;
+      }
+
+      if (keepCurrent) {
+        // On supprime l'ancien de la map et on ajoute à la liste de suppression
+        idsToDelete.push(existing.match_id);
+        uniqueMatchesMap.set(key, m);
+      } else {
+        // On supprime le nouveau (doublon inutile)
+        idsToDelete.push(m.match_id);
+      }
+    }
+  }
+
+  // Suppression effective des doublons en base de données
+  if (idsToDelete.length > 0) {
+    // On le fait en parallèle pour gagner du temps
+    await Promise.all(idsToDelete.map(id => db.run(`DELETE FROM Match WHERE match_id = ?`, [id])));
+    console.log(`🧹 Nettoyage terminé : ${idsToDelete.length} matchs doublons supprimés pour le tournoi ${tournamentId}.`);
+  }
+
+  // On travaille maintenant avec la liste PROPRE
+  matches = Array.from(uniqueMatchesMap.values());
+  // --- FIN BLOC NETTOYAGE ---
+
   const quarters = matches.filter((m: any) => m.round === "quarter");
   const semis = matches.filter((m: any) => m.round === "semi");
   const finalMatch = matches.find((m: any) => m.round === "final");
 
   const qWinners = new Map<number, number>();
   quarters.forEach((q: any) => {
-    if (q.winner && q.slot) qWinners.set(q.slot, q.winner);
+    if (q.winner && q.slot) qWinners.set(Number(q.slot), q.winner);
   });
 
   const createOrUpdateSemi = async (slot: number, fromSlots: [number, number]) => {
     const p1 = qWinners.get(fromSlots[0]);
     const p2 = qWinners.get(fromSlots[1]);
     if (!p1 || !p2) return;
-    const existing = semis.find((s: any) => s.slot === slot);
+
+    // Ici, grâce au nettoyage plus haut, 'existing' est garanti unique ou inexistant dans 'matches'
+    // Mais on garde la vérif DB au cas où
+    let existing = semis.find((s: any) => Number(s.slot) === slot);
+
+    if (!existing) {
+        const doubleCheck = await db.get(
+            `SELECT * FROM Match WHERE tournament_id = ? AND round = 'semi' AND slot = ?`,
+            [tournamentId, slot]
+        );
+        if (doubleCheck) existing = doubleCheck;
+    }
+
     if (existing) {
-      // Keep winner if already set and players unchanged
       const shouldResetWinner = existing.player1 !== p1 || existing.player2 !== p2;
-      await db.run(
-        `UPDATE Match SET player1 = ?, player2 = ?, winner = CASE WHEN ? THEN NULL ELSE winner END WHERE match_id = ?`,
-        [p1, p2, shouldResetWinner ? 1 : 0, existing.match_id]
-      );
+      if (shouldResetWinner || existing.player1 !== p1 || existing.player2 !== p2) {
+          await db.run(
+            `UPDATE Match SET player1 = ?, player2 = ?, winner = CASE WHEN ? THEN NULL ELSE winner END WHERE match_id = ?`,
+            [p1, p2, shouldResetWinner ? 1 : 0, existing.match_id]
+          );
+      }
     } else {
       const res = await db.run(
         `INSERT INTO Match (player1, player2, tournament_id, round, slot) VALUES (?, ?, ?, 'semi', ?)`,
@@ -216,18 +277,32 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
 
   const semiWinners = new Map<number, number>();
   semis.forEach((s: any) => {
-    if (s.winner && s.slot) semiWinners.set(s.slot, s.winner);
+    if (s.winner && s.slot) semiWinners.set(Number(s.slot), s.winner);
   });
 
   if (semiWinners.has(1) && semiWinners.has(2)) {
     const p1 = semiWinners.get(1)!;
     const p2 = semiWinners.get(2)!;
-    if (finalMatch) {
-      const resetWinner = finalMatch.player1 !== p1 || finalMatch.player2 !== p2;
-      await db.run(
-        `UPDATE Match SET player1 = ?, player2 = ?, winner = CASE WHEN ? THEN NULL ELSE winner END WHERE match_id = ?`,
-        [p1, p2, resetWinner ? 1 : 0, finalMatch.match_id]
-      );
+    
+    // Même logique : on nettoie d'abord en mémoire via 'finalMatch' (unique via le clean du haut)
+    let effectiveFinal = finalMatch; 
+    
+    if (!effectiveFinal) {
+         const doubleCheckFinal = await db.get(
+            `SELECT * FROM Match WHERE tournament_id = ? AND round = 'final'`,
+            [tournamentId]
+        );
+        if (doubleCheckFinal) effectiveFinal = doubleCheckFinal;
+    }
+
+    if (effectiveFinal) {
+      const resetWinner = effectiveFinal.player1 !== p1 || effectiveFinal.player2 !== p2;
+      if (resetWinner || effectiveFinal.player1 !== p1) {
+          await db.run(
+            `UPDATE Match SET player1 = ?, player2 = ?, winner = CASE WHEN ? THEN NULL ELSE winner END WHERE match_id = ?`,
+            [p1, p2, resetWinner ? 1 : 0, effectiveFinal.match_id]
+          );
+      }
     } else {
       await db.run(
         `INSERT INTO Match (player1, player2, tournament_id, round, slot) VALUES (?, ?, ?, 'final', 1)`,
@@ -236,7 +311,8 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
     }
   }
 
-  // Final winner -> mark tournament finished
+  // Vérification de la fin du tournoi et Blockchain
+  // On refait un petit select pour être sûr d'avoir l'état le plus frais après nos updates
   const updatedFinal = await db.get(
     `SELECT * FROM Match WHERE tournament_id = ? AND round = 'final' LIMIT 1`,
     [tournamentId]
@@ -246,19 +322,24 @@ async function progressBracket(fastify: FastifyInstance, tournamentId: number) {
     const winnerData = await resolvePlayerName(db, updatedFinal.winner);
     const winnerName = winnerData?.name;
     const winnerAvatar = winnerData?.avatar;
-    await db.run(
-      `UPDATE Tournament SET status = 'finished', WinnerId = ?, WinnerName = ?, WinnerAvatar = ? WHERE tournament_id = ?`,
-      [updatedFinal.winner, winnerName, winnerAvatar, tournamentId]
-    );
+    
+    const currentStatusRow = await db.get(`SELECT status FROM Tournament WHERE tournament_id = ?`, [tournamentId]);
+    
+    if (currentStatusRow?.status !== 'finished') {
+        await db.run(
+          `UPDATE Tournament SET status = 'finished', WinnerId = ?, WinnerName = ?, WinnerAvatar = ? WHERE tournament_id = ?`,
+          [updatedFinal.winner, winnerName, winnerAvatar, tournamentId]
+        );
 
-    const tournamentRow = await db.get(`SELECT name FROM Tournament WHERE tournament_id = ?`, [tournamentId]);
-    if (tournamentRow?.name && winnerName) {
-      try {
-        blockchainResult = await blockchainService.recordTournament(tournamentRow.name, winnerName, 8);
-        await persistBlockchainResult(db, tournamentId, blockchainResult);
-      } catch (err) {
-        fastify.log.error({ err }, "Failed to push tournament result to blockchain");
-      }
+        const tournamentRow = await db.get(`SELECT name FROM Tournament WHERE tournament_id = ?`, [tournamentId]);
+        if (tournamentRow?.name && winnerName) {
+          try {
+            blockchainResult = await blockchainService.recordTournament(tournamentRow.name, winnerName, 8);
+            await persistBlockchainResult(db, tournamentId, blockchainResult);
+          } catch (err) {
+            fastify.log.error({ err }, "Failed to push tournament result to blockchain");
+          }
+        }
     }
   }
 
