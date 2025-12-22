@@ -77,8 +77,9 @@ async function loadProfile(userId?: number) {
     }
 
     const safe = (v: any, fallback: string = "—") => (v === null || v === undefined || v === "" ? fallback : v);
-
-    usernameEl && (usernameEl.textContent = safe(profile.username));
+    const displayName = safe(profile.nickname?.trim() || profile.username);
+    usernameEl && (usernameEl.textContent = displayName);
+    //usernameEl && (usernameEl.textContent = safe(profile.username));
     emailEl && (emailEl.textContent = safe(profile.email));
     eloEl && (eloEl.textContent = safe(profile.elo ?? profile.rank ?? "—"));
     matchesEl && (matchesEl.textContent = safe(profile.matches_played ?? profile.matches ?? "0"));
