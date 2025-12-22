@@ -96,8 +96,10 @@ function renderBlockchainCard(container: HTMLElement, bc: BlockchainResult) {
             <h2 class="text-2xl font-bold text-green-800 mb-4">🏆 Certified tournament</h2>
             
             <div class="space-y-3 text-left">
-
-
+                <div class="flex items-center">
+                    <span class="font-semibold w-24">Block :</span>
+                    <span class="font-mono bg-white px-2 py-1 rounded border">${bc.blockNumber ?? "?"}</span>
+                </div>
                 <div class="flex items-center">
                     <span class="font-semibold w-24">Proof :</span>
                     <a href="${bc.explorerUrl || "#"}" target="_blank" class="text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
