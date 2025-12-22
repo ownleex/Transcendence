@@ -363,7 +363,6 @@ export async function showTournament(container: HTMLElement) {
                 }
             } else if (tournament.status === "ongoing") {
                 sessionStorage.removeItem(`tournament-blockchain-${tournament.tournament_id}`);
-                // ------------------------------------------------
 
                 blockchainContainer.innerHTML = `
                     <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex items-center gap-2">
@@ -372,12 +371,26 @@ export async function showTournament(container: HTMLElement) {
                     </div>
                 `;
             } else if (tournament.status === "finished") {
-                blockchainContainer.innerHTML = `
-                    <div class="p-4 bg-amber-50 border border-amber-200 rounded text-amber-800 flex items-center gap-2">
-                        <span class="animate-pulse">⌛</span>
-                        <span>Tournament finished. Recording on the blockchain...</span>
-                    </div>
-                `;
+                if (isOnlineMode) {
+                    blockchainContainer.innerHTML = `
+                        <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="animate-pulse">🌐</span>
+                                <span>Tournament finished. Recording on the blockchain...</span>
+                            </div>
+                            <div class="text-sm">
+                                Please wait a few seconds, then click on the "Refresh" button
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    blockchainContainer.innerHTML = `
+                        <div class="p-4 bg-amber-50 border border-amber-200 rounded text-amber-800 flex items-center gap-2">
+                            <span class="animate-pulse">⌛</span>
+                            <span>Tournament finished. Recording on the blockchain... The page will reload automatically.</span>
+                        </div>
+                    `;
+                }
             } else {
                 blockchainContainer.innerHTML = "";
             }
