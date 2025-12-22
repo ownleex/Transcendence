@@ -96,10 +96,7 @@ function renderBlockchainCard(container: HTMLElement, bc: BlockchainResult) {
             <h2 class="text-2xl font-bold text-green-800 mb-4">🏆 Certified tournament</h2>
             
             <div class="space-y-3 text-left">
-                <div class="flex items-center">
-                    <span class="font-semibold w-24">Block :</span>
-                    <span class="font-mono bg-white px-2 py-1 rounded border">${bc.blockNumber ?? "?"}</span>
-                </div>
+
 
                 <div class="flex items-center">
                     <span class="font-semibold w-24">Proof :</span>
@@ -186,8 +183,13 @@ export async function showTournament(container: HTMLElement) {
         try {
             const tournamentsRes = await fetchTournaments();
             const tournaments = tournamentsRes.tournaments || [];
-            if (!activeId && tournaments.length) {
-                activeId = tournaments[0].tournament_id;
+            const hasActive = activeId && tournaments.some((t: any) => t.tournament_id === activeId);
+
+            if (!hasActive) {
+                // Clear stale storage if it pointed to a deleted tournament
+                sessionStorage.removeItem("activeTournamentId");
+                localStorage.removeItem("activeTournamentId");
+                activeId = tournaments[0]?.tournament_id;
             }
 
             if (!activeId) {
@@ -211,9 +213,9 @@ export async function showTournament(container: HTMLElement) {
             sessionStorage.setItem("activeTournamentId", String(activeId));
             localStorage.setItem("activeTournamentId", String(activeId));
 
-        const bracketData = await fetchTournamentBracket(activeId);
-        const rounds = bracketData.rounds as { quarter: MatchLight[]; semi: MatchLight[]; final: MatchLight[] };
-        const nextMatch = findNextMatch(rounds);
+            const bracketData = await fetchTournamentBracket(activeId);
+            const rounds = bracketData.rounds as { quarter: MatchLight[]; semi: MatchLight[]; final: MatchLight[] };
+            const nextMatch = findNextMatch(rounds);
 
             const tournament = bracketData.tournament;
             const players = bracketData.players || [];
