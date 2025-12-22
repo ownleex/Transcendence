@@ -61,6 +61,117 @@ function findNextMatch(rounds: { quarter: MatchLight[]; semi: MatchLight[]; fina
     return null;
 }
 
+type BlockchainResult = {
+    blockNumber?: number;
+    explorerUrl?: string;
+    contractUrl?: string;
+    txHash?: string;
+};
+
+function extractBlockchainResult(tournament: any): BlockchainResult | null {
+    if (!tournament) return null;
+    const blockNumber = tournament.BlockchainBlockNumber ?? tournament.blockchainBlockNumber;
+    const explorerUrl = tournament.BlockchainExplorerUrl ?? tournament.blockchainExplorerUrl;
+    const contractUrl = tournament.BlockchainContractUrl ?? tournament.blockchainContractUrl;
+    const txHash = tournament.BlockchainTxHash ?? tournament.blockchainTxHash;
+    if (blockNumber || explorerUrl || contractUrl || txHash) {
+        return { blockNumber, explorerUrl, contractUrl, txHash };
+    }
+    return null;
+}
+
+function getCachedBlockchainResult(tournamentId: number): BlockchainResult | null {
+    const cacheKey = `tournament-blockchain-${tournamentId}`;
+    try {
+        const raw = sessionStorage.getItem(cacheKey);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function renderBlockchainCard(container: HTMLElement, bc: BlockchainResult) {
+    container.innerHTML = `
+        <div class="p-6 bg-green-50 border border-green-200 rounded-lg shadow-md mt-8 max-w-2xl mx-auto">
+            <h2 class="text-2xl font-bold text-green-800 mb-4">🏆 Certified tournament</h2>
+            
+            <div class="space-y-3 text-left">
+                <div class="flex items-center">
+                    <span class="font-semibold w-24">Block :</span>
+                    <span class="font-mono bg-white px-2 py-1 rounded border">${bc.blockNumber ?? "?"}</span>
+                </div>
+
+                <div class="flex items-center">
+                    <span class="font-semibold w-24">Preuve :</span>
+                    <a href="${bc.explorerUrl || "#"}" target="_blank" class="text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
+                        View transaction
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                    </a>
+                </div>
+
+                <div class="flex items-center">
+                    <span class="font-semibold w-24">Contrat :</span>
+                    <a href="${bc.contractUrl || "#"}" target="_blank" class="text-blue-600 hover:text-blue-800 underline flex items-center gap-1">
+                        See the smart contract
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                    </a>
+                </div>
+            </div>
+            
+            <p class="text-xs text-green-600 mt-4 text-center">Data recorded on Avalanche Fuji.</p>
+        </div>
+    `;
+}
+
+export async function finishTournament(tournamentId: number, container: HTMLElement, blockchainData?: BlockchainResult) {
+    const cacheKey = `tournament-blockchain-${tournamentId}`;
+    const cached = blockchainData
+        || (() => {
+            try {
+                const raw = sessionStorage.getItem(cacheKey);
+                return raw ? JSON.parse(raw) : null;
+            } catch {
+                return null;
+            }
+        })();
+
+    if (cached) {
+        renderBlockchainCard(container, cached);
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="text-center mt-10">
+            <p class="text-xl animate-pulse">⏳ Enregistrement sur la Blockchain en cours...</p>
+            <p class="text-sm text-gray-500">Cela peut prendre 10 a 15 secondes.</p>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`/api/tournament/${tournamentId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "finished" })
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.blockchain) {
+            renderBlockchainCard(container, data.blockchain);
+            try {
+                sessionStorage.setItem(cacheKey, JSON.stringify(data.blockchain));
+            } catch {
+                // Ignore storage failures
+            }
+        } else {
+            container.innerHTML = `<div class="text-red-500">❌ Erreur: ${data.error || data.message || "Probleme inconnu"}</div>`;
+        }
+    } catch (e) {
+        console.error(e);
+        container.innerHTML = `<div class="text-red-500">❌ Erreur de connexion au serveur.</div>`;
+    }
+}
+
 export async function showTournament(container: HTMLElement) {
     const me = JSON.parse(sessionStorage.getItem("me") || localStorage.getItem("me") || "{}");
     const myId = me?.id ? Number(me.id) : null;
@@ -231,9 +342,39 @@ export async function showTournament(container: HTMLElement) {
                             ? `<p class="text-gray-500 text-sm">Waiting for players to reach 8 to seed the bracket.</p>`
                             : `<p class="text-gray-500 text-sm">Bracket is complete.</p>`
                     }
+                    <div id="blockchainCard" class="mt-4"></div>
                     </div>
                 </div>
             `;
+
+        const blockchainData = extractBlockchainResult(tournament) || getCachedBlockchainResult(tournament.tournament_id);
+        const blockchainContainer = document.getElementById("blockchainCard");
+        if (blockchainContainer) {
+            if (blockchainData && tournament.status === "finished") {
+                renderBlockchainCard(blockchainContainer, blockchainData);
+                try {
+                    sessionStorage.setItem(`tournament-blockchain-${tournament.tournament_id}`, JSON.stringify(blockchainData));
+                } catch {
+                    /* ignore storage errors */
+                }
+            } else if (tournament.status === "ongoing") {
+                blockchainContainer.innerHTML = `
+                    <div class="p-4 bg-blue-50 border border-blue-200 rounded text-blue-800 flex items-center gap-2">
+                        <span class="animate-pulse">⏳</span>
+                        <span>The tournament is ongoing. Awaiting the final and registration on the Avalanche Fuji blockchain.</span>
+                    </div>
+                `;
+            } else if (tournament.status === "finished") {
+                blockchainContainer.innerHTML = `
+                    <div class="p-4 bg-amber-50 border border-amber-200 rounded text-amber-800 flex items-center gap-2">
+                        <span class="animate-pulse">⌛</span>
+                        <span>Tournament finished. Recording on the blockchain...</span>
+                    </div>
+                `;
+            } else {
+                blockchainContainer.innerHTML = "";
+            }
+        }
 
         document.getElementById("refreshBracket")?.addEventListener("click", loadAndRender);
         document.getElementById("tournamentSelector")?.addEventListener("change", (e) => {
@@ -323,6 +464,7 @@ export async function showTournament(container: HTMLElement) {
 
         if (nextMatch) {
             const match = nextMatch.match;
+            const isFinalMatch = match.round === "final";
             const labels = {
                 p1: match.player1?.name || match.player1?.displayName || "P1",
                 p2: match.player2?.name || match.player2?.displayName || "P2",
@@ -378,8 +520,23 @@ export async function showTournament(container: HTMLElement) {
                                 winnerId = s1 >= s2 ? p1Id : p2Id;
                             }
                             if (winnerId) {
-                                await reportTournamentResult(tournament.tournament_id, match.match_id, Number(winnerId), scores);
-                                await loadAndRender();
+                                try {
+                                    const resultPayload = await reportTournamentResult(
+                                        tournament.tournament_id,
+                                        match.match_id,
+                                        Number(winnerId),
+                                        scores
+                                    );
+                                    if (isFinalMatch) {
+                                        await finishTournament(tournament.tournament_id, container, resultPayload?.blockchain);
+                                        return;
+                                    }
+                                    await loadAndRender();
+                                } catch (err) {
+                                    console.error(err);
+                                    alert("Failed to record match result");
+                                    await loadAndRender();
+                                }
                             }
                         },
                     });
@@ -461,13 +618,21 @@ export async function showTournament(container: HTMLElement) {
 
                         if (!winnerId) return;
                         try {
-                            await reportTournamentResult(tournament.tournament_id, match.match_id, Number(winnerId), scores);
+                            const resultPayload = await reportTournamentResult(
+                                tournament.tournament_id,
+                                match.match_id,
+                                Number(winnerId),
+                                scores
+                            );
+                            if (isFinalMatch) {
+                                await finishTournament(tournament.tournament_id, container, resultPayload?.blockchain);
+                                return;
+                            }
                         } catch (err) {
                             console.error(err);
                             alert("Failed to record match result");
-                        } finally {
-                            await loadAndRender();
                         }
+                        await loadAndRender();
                     },
                 });
             });
@@ -500,6 +665,7 @@ export async function showTournament(container: HTMLElement) {
                 const match = [...(bracketData.rounds.quarter || []), ...(bracketData.rounds.semi || []), ...(bracketData.rounds.final || [])]
                     .find((m: any) => m.match_id === payload.bracketMatchId);
                 if (!match) return;
+                const isFinalAuto = match.round === "final";
                 const participantIds = [Number(match.player1?.user_id), Number(match.player2?.user_id)].filter((n) => Number.isFinite(n));
                 if (!participantIds.includes(myId)) return;
                 const labels = {
@@ -527,8 +693,23 @@ export async function showTournament(container: HTMLElement) {
                             winnerId = s1 >= s2 ? p1Id : p2Id;
                         }
                         if (winnerId) {
-                            await reportTournamentResult(payload.tournamentId, match.match_id, Number(winnerId), scores);
-                            await loadAndRender();
+                            try {
+                                const resultPayload = await reportTournamentResult(
+                                    payload.tournamentId,
+                                    match.match_id,
+                                    Number(winnerId),
+                                    scores
+                                );
+                                if (isFinalAuto) {
+                                    await finishTournament(payload.tournamentId, container, resultPayload?.blockchain);
+                                    return;
+                                }
+                                await loadAndRender();
+                            } catch (err) {
+                                console.error(err);
+                                alert("Failed to record match result");
+                                await loadAndRender();
+                            }
                         }
                     },
                 });
