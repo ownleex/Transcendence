@@ -248,7 +248,7 @@ export async function showTournament(container: HTMLElement) {
                         </div>
                         <div class="flex gap-2 items-center flex-wrap">
                             <select id="tournamentSelector" class="border rounded px-2 py-1 text-sm">${optionsHtml}</select>
-                            <button id="refreshBracket" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded">Refresh</button>
+                            <button id="refreshBracket" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 text-white rounded">Refresh</button>
                             ${joinable ? `<button id="joinTournament" class="px-3 py-1 bg-blue-600 text-white rounded">Join with alias or account</button>` : ""}
                             ${isInTournament ? `<button id="leaveTournament" class="px-3 py-1 bg-red-600 text-white rounded">Leave</button>` : ""}
                             <button id="newTournament" class="px-3 py-1 bg-indigo-600 text-white rounded">New tournament</button>
