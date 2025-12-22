@@ -522,51 +522,72 @@ fastify.put("/friend/unblock", { preHandler: [fastify.authenticate] }, async (re
             reply.code(500).send({ success: false, error: err.message });
         }
     });
+
 // ----------------------------
 // Update Display Name
 // ----------------------------
-    fastify.put("/displayname", { preHandler: [fastify.authenticate] }, async (req, reply) => {
-        const { nickname } = req.body as any;
-        const userId = req.user.id;
 
-        if (!nickname || !nickname.trim())
-            return reply.code(400).send({ success: false, error: "Nickname required" });
+fastify.put("/displayname", { preHandler: [fastify.authenticate] }, async (req, reply) => {
+    const { nickname } = req.body as any;
+    const userId = req.user.id;
 
-        try {
-            const trimmedNick = nickname.trim();
+    if (!nickname || !nickname.trim())
+        return reply.code(400).send({ success: false, error: "Nickname required" });
 
-            // Check if nickname is already taken (all players)
-            const existing = await fastify.db.get(
-                "SELECT 1 FROM Player WHERE nickname = ?",
-                [trimmedNick]
-            );
-            if (existing) {
-                return reply.code(409).send({ success: false, error: "Nickname already taken" });
-            }
+    try {
+        const trimmedNick = nickname.trim();
 
-            // On tente de mettre à jour le pseudo existant
-            const result = await fastify.db.run(
-                "UPDATE Player SET nickname = ? WHERE user_id = ?",
-                [trimmedNick, userId]
-            );
-
-            // Si aucune ligne n'a été modifiée (result.changes === 0), c'est que le joueur
-            // n'existait pas encore dans la table Player. On doit donc le créer.
-            if (result.changes === 0) {
-                await fastify.db.run(
-                    "INSERT INTO Player (user_id, tournament_id, nickname) VALUES (?, 1, ?)",
-                    [userId, trimmedNick]
-                );
-            }
-            
-            // Fetch updated user profile
-            const updatedUser = await getFullUserProfile(fastify.db, userId);
-
-            reply.send({ success: true, user: updatedUser });
-        } catch (err: any) {
-            reply.code(500).send({ success: false, error: err.message });
+        // 1. Vérifier si le pseudo est déjà pris
+        const existing = await fastify.db.get(
+            "SELECT 1 FROM Player WHERE nickname = ?",
+            [trimmedNick]
+        );
+        if (existing) {
+            return reply.code(409).send({ success: false, error: "Nickname already taken" });
         }
-    });
+
+        // 2. Tenter de mettre à jour le pseudo existant
+        const result = await fastify.db.run(
+            "UPDATE Player SET nickname = ? WHERE user_id = ?",
+            [trimmedNick, userId]
+        );
+
+        // 3. Si aucune ligne modifiée, l'utilisateur n'est pas encore dans la table Player
+        if (result.changes === 0) {
+            // On vérifie d'abord si le Tournoi #1 (ou un tournoi par défaut) existe
+            const defaultTournamentId = 1;
+            const tournamentExists = await fastify.db.get(
+                "SELECT tournament_id FROM Tournament WHERE tournament_id = ?",
+                [defaultTournamentId]
+            );
+
+            if (tournamentExists) {
+                // Le tournoi existe, on peut insérer
+                await fastify.db.run(
+                    "INSERT INTO Player (user_id, tournament_id, nickname) VALUES (?, ?, ?)",
+                    [userId, defaultTournamentId, trimmedNick]
+                );
+            } else {
+                // Le tournoi n'existe pas.
+                return reply.code(404).send({ 
+                    success: false, 
+                    error: "You have to create a tournament before changing the display name." 
+                });
+            }
+        }
+        
+        // 4. Récupérer le profil mis à jour pour le renvoyer
+        // Note: getFullUserProfile utilise LEFT JOIN sur Player, donc ça fonctionnera même si l'INSERT a échoué.
+        const updatedUser = await getFullUserProfile(fastify.db, userId);
+
+        reply.send({ success: true, user: updatedUser });
+    } catch (err: any) {
+        // Astuce de prof : Log l'erreur pour le débuggage serveur
+        req.log.error(err);
+        reply.code(500).send({ success: false, error: err.message });
+    }
+});
+
 // ----------------------------
 // Upload Avatar
 // ----------------------------
