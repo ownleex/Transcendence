@@ -673,7 +673,7 @@ export async function showTournament(container: HTMLElement) {
         }
     }
 
-    // Attach socket listeners once to refresh presence and auto-start matches
+    // Attach socket listeners once to refresh presence and auto-start  matches
     function ensureSocketListeners() {
         if (!socket || socketListenersAttached) return;
         socketListenersAttached = true;
