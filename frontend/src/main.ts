@@ -120,6 +120,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         const playQuadLocalBtn = document.getElementById("playQuadLocalBtn");
         const viewTournamentBtn = document.getElementById("viewtournamentBtn");   
         const quickAliasTournamentBtn = document.getElementById("quickAliasTournamentBtn");
+        const quickRemoteTournamentBtn = document.getElementById("quickRemoteTournamentBtn");
 
         playDuoBtn?.addEventListener("click", () => {
             showGame(gameContainer, "duo", { source: "matchmaking" });
@@ -147,7 +148,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                     alert("You must be logged in to start an alias-only tournament.");
                     return;
                 }
-                const name = `Alias tournament ${new Date().toLocaleString()}`;
+                const name = `Local tournament ${new Date().toLocaleString()}`;
                 try {
                     const res = await createTournament({
                         name,
@@ -164,6 +165,32 @@ window.addEventListener("DOMContentLoaded", async () => {
                     window.location.hash = "#tournament";
                 } catch (err: any) {
                     alert(err?.message || "Failed to create alias-only tournament");
+                }
+            })();
+        });
+        quickRemoteTournamentBtn?.addEventListener("click", () => {
+            (async () => {
+                if (!me?.id) {
+                    alert("You must be logged in to start a remote tournament.");
+                    return;
+                }
+                const name = `Open ${new Date().toLocaleString()}`;
+                try {
+                    const res = await createTournament({
+                        name,
+                        max_players: 8,
+                        admin_id: me.id,
+                        is_private: 0,
+                        mode: "online",
+                    });
+                    const tid = res.tournament_id || res.id;
+                    if (tid) {
+                        sessionStorage.setItem("activeTournamentId", String(tid));
+                        localStorage.setItem("activeTournamentId", String(tid));
+                    }
+                    window.location.hash = "#tournament";
+                } catch (err: any) {
+                    alert(err?.message || "Failed to create remote tournament");
                 }
             })();
         });      
