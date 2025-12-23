@@ -27,18 +27,22 @@ export function showHome(app: HTMLElement) {
         <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">Tournaments</h2>
         <p class="text-gray-500 dark:text-gray-400 mb-4">Compete in official events.</p>
         <div class="flex flex-col gap-3">
-            <button id="viewtournamentBtn"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md">
-              View Tournaments
-            </button>
-            <button id="quickAliasTournamentBtn"
-                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
-              Start local tournament (alias-only)
-            </button>
-            <button id="quickRemoteTournamentBtn"
-                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">
-              Start remote tournament
-            </button>
+          <button id="viewtournamentBtn"
+                  class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md w-full">
+            View Tournaments
+          </button>
+          
+          <div class="flex gap-3">
+              <button id="quickAliasTournamentBtn"
+                      class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm">
+                Start local tournament (alias-only)
+              </button>
+              <button id="quickRemoteTournamentBtn"
+                      class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">
+                Start remote tournament
+              </button>
+          </div>
+        </div>
         </div>
       </div>
       <div id="gameContainer" class="mt-8"></div>
