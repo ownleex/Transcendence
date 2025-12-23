@@ -35,6 +35,10 @@ export function showHome(app: HTMLElement) {
                     class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
               Start local tournament (alias-only)
             </button>
+            <button id="quickRemoteTournamentBtn"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">
+              Start remote tournament
+            </button>
         </div>
       </div>
       <div id="gameContainer" class="mt-8"></div>
