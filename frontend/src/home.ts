@@ -33,7 +33,7 @@ export function showHome(app: HTMLElement) {
             </button>
             <button id="quickAliasTournamentBtn"
                     class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md">
-              Start alias-only tournament
+              Start local tournament (alias-only)
             </button>
         </div>
       </div>
