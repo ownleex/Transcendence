@@ -35,7 +35,7 @@ export function showHome(app: HTMLElement) {
           <div class="flex gap-3">
               <button id="quickAliasTournamentBtn"
                       class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm">
-                Start local tournament (alias-only)
+                Start local tournament
               </button>
               <button id="quickRemoteTournamentBtn"
                       class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">
