@@ -147,7 +147,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                     alert("You must be logged in to start an alias-only tournament.");
                     return;
                 }
-                const name = `Alias tournament ${new Date().toLocaleString()}`;
+                const name = `Local tournament ${new Date().toLocaleString()}`;
                 try {
                     const res = await createTournament({
                         name,
