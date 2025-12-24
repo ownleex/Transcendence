@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
     command:
       - "http"
-      - "--url=saul-unsubpoenaed-lakeisha.ngrok-free.dev"
+      - "--url=${URL_NGROK}"
       - "https://app:3000"
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}

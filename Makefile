@@ -1,3 +1,7 @@
+-include .env
+
+export
+
 NAME = ft_transcendence
 
 # Colors
@@ -13,7 +17,7 @@ all:
 	@echo "$(GREEN)✓ Build complete!$(NC)"
 	@echo "$(BLUE)🔄 Starting containers...$(NC)"
 	@docker compose up -d
-	@echo "$(GREEN)✓ $(NAME) is up and running! https://saul-unsubpoenaed-lakeisha.ngrok-free.dev or https://localhost:3000$(NC)"
+	@echo "$(GREEN)✓ $(NAME) is up and running! $(API_BASE) or https://localhost:3000$(NC)"
 up: 
 	@docker compose up -d
 
