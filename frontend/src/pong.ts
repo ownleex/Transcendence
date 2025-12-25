@@ -204,6 +204,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         }
     };
     let returnTriggered = false;
+    let historyPushed = false;
     const resumeMatchKey = "lastOnlineMatchId";
     const resumeMatchModeKey = "lastOnlineMatchMode";
     const resumeMatchSourceKey = "lastOnlineMatchSource";
@@ -222,20 +223,45 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             localStorage.removeItem(resumeMatchSourceKey);
         }
     };
+    const refreshRoute = () => {
+        window.dispatchEvent(new Event("app:route-refresh"));
+    };
+    const refreshTournamentView = () => {
+        if (source !== "tournament") return;
+        const currentHash = window.location.hash || "#home";
+        if (currentHash === returnHash) {
+            refreshRoute();
+        }
+    };
+    const pushGameHistory = () => {
+        if (historyPushed) return;
+        try {
+            history.pushState({ inGame: true, returnHash }, "", window.location.href);
+            historyPushed = true;
+        } catch {
+            // ignore history errors (e.g., Safari private mode)
+        }
+    };
     const handleReturn = () => {
         if (returnTriggered) return;
         returnTriggered = true;
         teardown();
-        if (window.location.hash !== returnHash) {
-            window.location.hash = returnHash || "#home";
+        const targetHash = returnHash || "#home";
+        const currentHash = window.location.hash || "#home";
+        if (currentHash !== targetHash) {
+            window.location.hash = targetHash;
             return;
         }
-        window.dispatchEvent(new Event("app:route-refresh"));
+        refreshRoute();
     };
     const handleNavigationAway = () => {
         if (returnTriggered) return;
         returnTriggered = true;
         teardown();
+        const currentHash = window.location.hash || "#home";
+        if (currentHash === returnHash) {
+            refreshRoute();
+        }
     };
     window.addEventListener("hashchange", handleNavigationAway);
     window.addEventListener("popstate", handleNavigationAway);
@@ -305,6 +331,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             chatInput,
         } = buildUI(container, !isLocal));
         applyControlsHint(wrapper, isQuad, isLocal);
+        pushGameHistory();
 
         currentMatchId = matchId;
         storeResumeMatch(matchId);
@@ -497,6 +524,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             } catch (err) {
                 console.error("onEnd handler failed:", err);
             }
+            refreshTournamentView();
             clearResumeMatch();
             showReturnOverlay(handleReturn);
         });
@@ -605,6 +633,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             chatInput,
         } = buildUI(container, false));
         applyControlsHint(wrapper, isQuad, isLocal);
+        pushGameHistory();
     }
 
     // ---------------------------
@@ -690,12 +719,6 @@ function stepLocal(
         state.ball.vy = 0;
         state.ball.x = config.width / 2;
         state.ball.y = config.height / 2;
-        state.paddles.p1 = config.height / 2;
-        state.paddles.p2 = config.height / 2;
-        if (isQuad) {
-            state.paddles.p3 = config.width / 2;
-            state.paddles.p4 = config.width / 2;
-        }
         if (keys.has(" ") || keys.has("Enter")) {
             serveCtrl.pending = false;
             resetLocalBall(state, config);

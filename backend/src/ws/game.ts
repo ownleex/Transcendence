@@ -117,18 +117,6 @@ function launchBall(ball: BallState) {
     ball.vy = fresh.vy;
 }
 
-function resetPaddles(match: Match) {
-    if (match.state.mode === 2) {
-        (match.state.paddles as any).p1 = ARENA_H / 2;
-        (match.state.paddles as any).p2 = ARENA_H / 2;
-    } else {
-        (match.state.paddles as any).p1 = ARENA_H / 2;
-        (match.state.paddles as any).p2 = ARENA_H / 2;
-        (match.state.paddles as any).p3 = ARENA_W / 2;
-        (match.state.paddles as any).p4 = ARENA_W / 2;
-    }
-}
-
 // --------------------
 // Direct match creation (used by tournament)
 // --------------------
@@ -373,7 +361,6 @@ export function setupGameWS(fastify: FastifyInstance) {
                     match.sockets.delete(effectivePlayerId);
                     match.ready.delete(effectivePlayerId);
                     stopCountdown(match);
-                    resetPaddles(match);
                     match.state.ball.x = ARENA_W / 2;
                     match.state.ball.y = ARENA_H / 2;
                     match.state.ball.vx = 0;
@@ -549,7 +536,6 @@ export function setupGameWS(fastify: FastifyInstance) {
                 match.ioSockets.delete(userId);
                 match.ready.delete(userId);
                 stopCountdown(match);
-                resetPaddles(match);
                 match.state.ball.x = ARENA_W / 2;
                 match.state.ball.y = ARENA_H / 2;
                 match.state.ball.vx = 0;
@@ -739,7 +725,6 @@ function tryStartCountdown(match: Match) {
         stopCountdown(match);
         match.started = true;
         match.servePending = true;
-        resetPaddles(match);
         match.state.ball.vx = 0;
         match.state.ball.vy = 0;
         broadcast(match, {
@@ -815,7 +800,6 @@ async function recordMatch(match: Match, winnerKey: string) {
 
 function handleScore(match: Match, scorerKey: string) {
     match.scores[scorerKey] = (match.scores[scorerKey] || 0) + 1;
-    resetPaddles(match);
     // stop ball and wait for serve
     match.state.ball.x = ARENA_W / 2;
     match.state.ball.y = ARENA_H / 2;
