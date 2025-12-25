@@ -226,16 +226,19 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
         if (returnTriggered) return;
         returnTriggered = true;
         teardown();
-        if (window.location.hash === returnHash) {
-            try {
-                window.dispatchEvent(new HashChangeEvent("hashchange"));
-            } catch {
-                window.location.hash = returnHash || "#home";
-            }
-        } else {
+        if (window.location.hash !== returnHash) {
             window.location.hash = returnHash || "#home";
+            return;
         }
+        window.dispatchEvent(new Event("app:route-refresh"));
     };
+    const handleNavigationAway = () => {
+        if (returnTriggered) return;
+        returnTriggered = true;
+        teardown();
+    };
+    window.addEventListener("hashchange", handleNavigationAway);
+    window.addEventListener("popstate", handleNavigationAway);
 
     // ---------------------------
     // Remote matchmaking + WS
@@ -301,6 +304,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             chatForm,
             chatInput,
         } = buildUI(container, !isLocal));
+        applyControlsHint(wrapper, isQuad, isLocal);
 
         currentMatchId = matchId;
         storeResumeMatch(matchId);
@@ -481,14 +485,18 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             }
         });
 
-        gameSocket.on("end", (msg: any) => {
+        gameSocket.on("end", async (msg: any) => {
             if (matchEnded) return;
             matchEnded = true;
             running = false;
             matchStarted = false;
             if (msg?.names) nameLabels = { ...(nameLabels || {}), ...msg.names };
             renderScores(scoreBox, scores, isQuad, msg?.winner || "END", nameLabels || msg?.names);
-            options.onEnd?.({ winner: msg?.winner, scores });
+            try {
+                if (options.onEnd) await options.onEnd({ winner: msg?.winner, scores });
+            } catch (err) {
+                console.error("onEnd handler failed:", err);
+            }
             clearResumeMatch();
             showReturnOverlay(handleReturn);
         });
@@ -596,6 +604,7 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             chatForm,
             chatInput,
         } = buildUI(container, false));
+        applyControlsHint(wrapper, isQuad, isLocal);
     }
 
     // ---------------------------
@@ -648,6 +657,10 @@ export async function showGame(container: HTMLElement, mode: GameMode = "duo", o
             overlay.parentElement.removeChild(overlay);
             overlay = null;
         }
+        const returnOverlay = document.getElementById("match-return-overlay");
+        if (returnOverlay) returnOverlay.remove();
+        window.removeEventListener("hashchange", handleNavigationAway);
+        window.removeEventListener("popstate", handleNavigationAway);
         window.removeEventListener("keydown", keydownHandler);
         window.removeEventListener("keyup", keyupHandler);
         (window as any).stopCurrentGame = undefined;
@@ -963,6 +976,21 @@ function buildUI(
     statusBox.style.pointerEvents = "none";
     wrapper.appendChild(statusBox);
 
+    const controlsBox = document.createElement("div");
+    controlsBox.id = "pong-controls";
+    controlsBox.style.position = "absolute";
+    controlsBox.style.left = "16px";
+    controlsBox.style.bottom = "16px";
+    controlsBox.style.background = "rgba(17,24,39,0.85)";
+    controlsBox.style.color = "#e5e7eb";
+    controlsBox.style.padding = "8px 10px";
+    controlsBox.style.borderRadius = "8px";
+    controlsBox.style.fontSize = "12px";
+    controlsBox.style.fontWeight = "600";
+    controlsBox.style.maxWidth = "320px";
+    controlsBox.style.lineHeight = "1.3";
+    wrapper.appendChild(controlsBox);
+
     let messagesList: HTMLUListElement | null = null;
     let chatForm: HTMLFormElement | null = null;
     let chatInput: HTMLInputElement | null = null;
@@ -1020,6 +1048,18 @@ function buildUI(
     }
 
     return { overlay, wrapper, canvas, ctx, scoreBox, statusBox, messagesList, chatForm, chatInput };
+}
+
+function applyControlsHint(wrapper: HTMLDivElement, isQuad: boolean, isLocal: boolean) {
+    const controlsBox = wrapper.querySelector<HTMLDivElement>("#pong-controls");
+    if (!controlsBox) return;
+    const base = isQuad
+        ? "Controls: P1 W/S, P2 Up/Down, P3 A/D, P4 J/L."
+        : "Controls: P1 W/S, P2 Up/Down.";
+    const extra = isLocal
+        ? " Press Space or Enter to serve."
+        : " Press Space or Enter, or click Ready to start/serve.";
+    controlsBox.textContent = base + extra;
 }
 
 function showReturnOverlay(onReturn: () => void, delaySeconds: number = 5) {

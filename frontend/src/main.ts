@@ -108,6 +108,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // activate hash router
     window.addEventListener("hashchange", router);
+    window.addEventListener("app:route-refresh", () => router());
 
     await router();
 
