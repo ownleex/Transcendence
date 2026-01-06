@@ -432,20 +432,30 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const resetLink = `${API_BASE}/reset-password?token=${token}`;
 
     try {
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+
+      if (!smtpUser || !smtpPass) {
+        fastify.log.error("SMTP credentials are missing");
+        return reply.code(500).send({ error: "Email service not configured." });
+      }
+
+      const smtpFrom = process.env.SMTP_FROM || smtpUser;
+
       const transporter = nodemailer.createTransport({
         host: "smtp.gmail.com",
         port: 465,
         secure: true,
         auth: {
-          user: "lientranthikim@gmail.com",
-          pass: "qubvudqwvndqfyeq" // your app password
+          user: smtpUser,
+          pass: smtpPass
         },
         logger: true,
         debug: true
       });
 
       const info = await transporter.sendMail({
-        from: '"Transcendence 42" <lientranthikim@gmail.com>',
+        from: `"Transcendence 42" <${smtpFrom}>`,
         to: user.email,
         subject: "Reset your Transcendence password",
         html: `<p>Hello,</p>
